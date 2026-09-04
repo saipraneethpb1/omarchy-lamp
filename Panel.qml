@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 Panel {
     id: root
@@ -18,10 +19,15 @@ Panel {
 
     property string draft: ""
 
+    readonly property int targetMinutes: Model.parseDuration(durationField.text)
+    readonly property int lamptargetMinutes: lamp ? (lamp.targetMinutes || 0) : 0
+    readonly property bool overtime: lamp ? lamp.overtime === true : false
+
     function open() {
         if (lamp && typeof lamp.refresh === "function")
             lamp.refresh()
         field.clear()
+        durationField.clear()
         root.draft = ""
         root.controller.show()
         Qt.callLater(function() { field.forceActiveFocus() })
@@ -54,13 +60,15 @@ Panel {
         if (root.lit) {
             lamp.extinguish(text)
             field.clear()
+            durationField.clear()
             root.close()
             return
         }
         if (!text.length)
             return
-        lamp.light(text)
+        lamp.light(text, root.targetMinutes)
         field.clear()
+        durationField.clear()
         root.close()
     }
 
@@ -119,9 +127,11 @@ Panel {
                 Text {
                     width: parent.width
                     visible: root.lit
-                    text: root.intention + (root.elapsed.length ? ("  \u00b7  " + root.elapsed) : "")
-                    color: root.barForeground
-                    opacity: 0.7
+                    text: root.intention
+                          + (root.elapsed.length ? ("  \u00b7  " + root.elapsed) : "")
+                          + (root.lamptargetMinutes > 0 ? (" of " + Model.formatTarget(root.lamptargetMinutes)) : "")
+                    color: root.overtime ? "#e0563f" : root.barForeground
+                    opacity: root.overtime ? 1 : 0.7
                     font.family: root.bar ? root.bar.fontFamily : Style.font.family
                     font.pixelSize: Style.font.body
                     wrapMode: Text.WordWrap
@@ -139,6 +149,50 @@ Panel {
                     onTextChanged: root.draft = text
                     onAccepted: root.submit()
                     Keys.onEscapePressed: root.close()
+                    Keys.onDownPressed: if (!root.lit) durationField.forceActiveFocus()
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                            root.switchPanel((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                Row {
+                    width: parent.width
+                    visible: !root.lit
+                    spacing: Style.space(6)
+
+                    Repeater {
+                        model: [25, 50, 90]
+
+                        Button {
+                            required property int modelData
+                            text: Model.formatTarget(modelData)
+                            bordered: true
+                            selected: root.targetMinutes === modelData
+                            foreground: root.barForeground
+                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                            onClicked: {
+                                durationField.text = root.targetMinutes === modelData ? "" : String(modelData)
+                                field.forceActiveFocus()
+                            }
+                        }
+                    }
+                }
+
+                TextField {
+                    id: durationField
+                    width: parent.width
+                    visible: !root.lit
+                    placeholderText: "No limit \u00b7 or 45m, 1h30m"
+                    foreground: root.barForeground
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.body
+
+                    onAccepted: root.submit()
+                    Keys.onEscapePressed: root.close()
+                    Keys.onUpPressed: field.forceActiveFocus()
                     Keys.onPressed: function(event) {
                         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
                             root.switchPanel((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)
@@ -149,7 +203,9 @@ Panel {
 
                 Text {
                     width: parent.width
-                    text: root.lit ? "Enter to extinguish \u00b7 Esc to leave it lit" : "Type, then Enter \u00b7 Esc to close"
+                    text: root.lit
+                          ? "Enter to extinguish \u00b7 Esc to leave it lit"
+                          : "Enter to light \u00b7 \u2193 for a time limit \u00b7 Esc to close"
                     color: root.barForeground
                     opacity: 0.4
                     font.family: root.bar ? root.bar.fontFamily : Style.font.family

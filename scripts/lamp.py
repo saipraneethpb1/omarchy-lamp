@@ -12,6 +12,7 @@ from pathlib import Path
 STATE_DIR = Path.home() / ".local" / "state" / "omarchy" / "lamp"
 SHARE_DIR = Path.home() / ".local" / "share" / "omarchy-lamp"
 SESSION_PATH = STATE_DIR / "session.json"
+MAX_TARGET_MINUTES = 24 * 60
 
 
 def now_iso() -> str:
@@ -20,6 +21,23 @@ def now_iso() -> str:
 
 def today_stamp() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d")
+
+
+def format_minutes(total: int) -> str:
+    total = max(0, int(total))
+    hours, minutes = divmod(total, 60)
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
+
+
+def clamp_minutes(value) -> int:
+    try:
+        return max(0, min(MAX_TARGET_MINUTES, int(value)))
+    except (TypeError, ValueError):
+        return 0
 
 
 def load_session() -> dict:
@@ -58,7 +76,7 @@ def cmd_status() -> int:
     return 0
 
 
-def cmd_light(intention: str) -> int:
+def cmd_light(intention: str, target_minutes: int = 0) -> int:
     intention = " ".join(intention.split()).strip()
     if not intention:
         print(json.dumps({"error": "empty-intention"}))
@@ -71,6 +89,7 @@ def cmd_light(intention: str) -> int:
         "startedAt": now_iso(),
         "endedAt": None,
         "close": None,
+        "targetMinutes": clamp_minutes(target_minutes) or None,
     }
     save_session(session)
     print(json.dumps(session, ensure_ascii=False))
@@ -96,6 +115,9 @@ def cmd_extinguish(close: str) -> int:
         "",
         f"**Intention:** {intention}",
     ]
+    target = clamp_minutes(session.get("targetMinutes"))
+    if target:
+        lines += ["", f"**Planned:** {format_minutes(target)}"]
     if close:
         lines += ["", f"**What moved:** {close}"]
     path = append_journal("\n".join(lines))
@@ -113,7 +135,14 @@ def main(argv: list[str]) -> int:
     if action == "status":
         return cmd_status()
     if action == "light":
-        return cmd_light(rest)
+        args = argv[1:]
+        target = 0
+        # "light --for <minutes> <intention...>"; the flag is optional so the
+        # older "light <intention...>" form still works.
+        if len(args) >= 2 and args[0] == "--for":
+            target = clamp_minutes(args[1])
+            args = args[2:]
+        return cmd_light(" ".join(args).strip(), target)
     if action == "extinguish":
         return cmd_extinguish(rest)
     print(json.dumps({"error": "unknown-command"}))

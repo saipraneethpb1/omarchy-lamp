@@ -42,15 +42,20 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle lamp.session '{}
 
 1. Click the bar or hit the keybind.
 2. Type one sentence. Example: `Finish the marketplace submission for Lamp`.
-3. Enter lights it. The bar reads `◉ Finish the marketplace…  47m`.
-4. Click again when you stop. Type what moved, or leave it blank.
-5. Escape closes the overlay without changing the session.
+3. Optionally give yourself a time: press `↓` for the limit field, or click
+   `25m` / `50m` / `90m`. Type any of `45`, `45m`, `2h`, `1h30m`. Blank means
+   no limit.
+4. Enter lights it. The bar reads `◉ Finish the marketplace…  47m`.
+5. Past the time you set, the bar turns red — the lamp is still lit, you are
+   just over. Nothing interrupts you.
+6. Click again when you stop. Type what moved, or leave it blank.
+7. Escape closes the overlay without changing the session.
 
 ## Files it writes
 
 | Path | What |
 |---|---|
-| `~/.local/state/omarchy/lamp/session.json` | Current flame |
+| `~/.local/state/omarchy/lamp/session.json` | Current flame, with its time limit |
 | `~/.local/share/omarchy-lamp/YYYY-MM-DD.md` | Daily journal |
 
 Both stay on this machine. Removal does not delete them.
@@ -63,6 +68,8 @@ Example journal page:
 ## 2026-09-04T10:41:00+05:30 → 2026-09-04T12:03:00+05:30
 
 **Intention:** Finish the marketplace submission for Lamp
+
+**Planned:** 1h 30m
 
 **What moved:** Manifest, overlay, and the first honest README
 ```

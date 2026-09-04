@@ -20,11 +20,17 @@ BarWidget {
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
+    readonly property int targetMinutes: lamp ? (lamp.targetMinutes || 0) : 0
+    readonly property bool overtime: lamp ? lamp.overtime === true : false
 
     // Warm lamplight for the lit state, matching the overlay's accent. Held as
     // a literal rather than a theme role because it stands for the flame, not
     // for the bar's foreground.
     readonly property color lampColor: "#e8c36a"
+
+    // Past the time you gave yourself. Deliberately not the theme's urgent
+    // role: this is the same flame, burning longer than planned.
+    readonly property color overtimeColor: "#e0563f"
 
     readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
     readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
@@ -99,9 +105,15 @@ BarWidget {
         anchors.fill: parent
         bar: root.bar
         active: root.opened
-        foreground: root.lit ? root.lampColor : (root.bar ? root.bar.barForeground : Color.foreground)
+        foreground: root.lit
+            ? (root.overtime ? root.overtimeColor : root.lampColor)
+            : (root.bar ? root.bar.barForeground : Color.foreground)
         text: root.lit ? "◉  " + Model.shorten(root.intention, 28) + "  " + root.elapsed : "○  Lamp"
-        tooltipText: root.lit ? "Click to put the lamp out" : "Click to light a session"
+        tooltipText: root.lit
+            ? (root.overtime
+                ? "Over the " + Model.formatTarget(root.targetMinutes) + " you planned \u00b7 click to put it out"
+                : "Click to put the lamp out")
+            : "Click to light a session"
         horizontalMargin: 8.75
         verticalPadding: 8.75
         onPressed: function(buttonCode) {

@@ -17,6 +17,10 @@ Item {
     property string lastError: ""
     property string journalPath: ""
     property string elapsed: Model.formatElapsed(startedAt)
+    property int targetMinutes: 0
+    // True once a lit session passes the minutes it was given. Recomputed on
+    // the same tick as elapsed, so the bar turns over without a poll of its own.
+    property bool overtime: false
 
     readonly property url helper: Qt.resolvedUrl("scripts/lamp.py")
 
@@ -28,7 +32,10 @@ Item {
         interval: 1000
         running: root.lit
         repeat: true
-        onTriggered: root.elapsed = Model.formatElapsed(root.startedAt)
+        onTriggered: {
+            root.elapsed = Model.formatElapsed(root.startedAt)
+            root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetMinutes)
+        }
     }
 
     Process {
@@ -61,7 +68,9 @@ Item {
         root.intention = data.intention || ""
         root.startedAt = data.startedAt || ""
         root.journalPath = data.journal || root.journalPath
+        root.targetMinutes = Model.clampMinutes(data.targetMinutes || 0)
         root.elapsed = Model.formatElapsed(root.startedAt)
+        root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetMinutes)
     }
 
     function refresh() {
@@ -71,12 +80,17 @@ Item {
         reader.running = true
     }
 
-    function light(text) {
+    function light(text, minutes) {
         const intention = (text || "").trim()
         if (!intention || writer.running)
             return
         root.lastError = ""
-        writer.command = ["python3", root.helperPath(), "light", intention]
+        const target = Model.clampMinutes(minutes)
+        const command = ["python3", root.helperPath(), "light"]
+        if (target > 0)
+            command.push("--for", String(target))
+        command.push(intention)
+        writer.command = command
         writer.running = true
     }
 

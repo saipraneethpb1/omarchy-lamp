@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "Model.js" as Model
 
 Item {
     id: root
@@ -20,9 +21,14 @@ Item {
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
+    readonly property int lamptargetMinutes: lamp ? (lamp.targetMinutes || 0) : 0
+    readonly property bool overtime: lamp ? lamp.overtime === true : false
+
+    readonly property int targetMinutes: Model.parseDuration(durationField.text)
 
     function open(payloadJson) {
         field.clear()
+        durationField.clear()
         if (lamp)
             lamp.refresh()
         root.opened = true
@@ -56,13 +62,15 @@ Item {
         if (root.lit) {
             lamp.extinguish(text)
             field.clear()
+            durationField.clear()
             root.dismiss()
             return
         }
         if (!text.length)
             return
-        lamp.light(text)
+        lamp.light(text, root.targetMinutes)
         field.clear()
+        durationField.clear()
         root.dismiss()
     }
 
@@ -151,10 +159,12 @@ Item {
                         Text {
                             width: parent.width
                             wrapMode: Text.WordWrap
-                            color: Qt.rgba(1, 1, 1, 0.65)
+                            color: root.overtime ? "#e0563f" : Qt.rgba(1, 1, 1, 0.65)
                             font.pixelSize: 14
                             text: root.lit
-                                  ? (root.intention + (root.elapsed.length ? ("  ·  " + root.elapsed) : ""))
+                                  ? (root.intention
+                                     + (root.elapsed.length ? ("  ·  " + root.elapsed) : "")
+                                     + (root.lamptargetMinutes > 0 ? (" of " + Model.formatTarget(root.lamptargetMinutes)) : ""))
                                   : "Type a sentence, then press Enter or click Light."
                         }
 
@@ -218,6 +228,77 @@ Item {
                                         z: 9
                                         onClicked: root.lightPreset(modelData)
                                     }
+                                }
+                            }
+                        }
+
+                        Row {
+                            id: durationRow
+                            spacing: 8
+                            visible: !root.lit
+
+                            Repeater {
+                                model: [25, 50, 90]
+
+                                Rectangle {
+                                    id: chip
+                                    required property int modelData
+                                    readonly property bool picked: root.targetMinutes === modelData
+                                    width: 72
+                                    height: 30
+                                    radius: 6
+                                    color: picked ? "#e8c36a" : Qt.rgba(1, 1, 1, 0.12)
+                                    z: 8
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: Model.formatTarget(chip.modelData)
+                                        color: chip.picked ? "#111111" : "white"
+                                        font.pixelSize: 13
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        z: 9
+                                        onClicked: {
+                                            durationField.text = chip.picked ? "" : String(chip.modelData)
+                                            field.forceActiveFocus()
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 132
+                                height: 30
+                                radius: 6
+                                color: Qt.rgba(1, 1, 1, 0.08)
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.18)
+
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    visible: durationField.text.length === 0
+                                    text: "No limit"
+                                    color: "white"
+                                    opacity: 0.35
+                                    font.pixelSize: 13
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                TextInput {
+                                    id: durationField
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    color: "white"
+                                    font.pixelSize: 13
+                                    verticalAlignment: Text.AlignVCenter
+                                    clip: true
+                                    selectByMouse: true
+                                    selectionColor: "#e8c36a"
+                                    selectedTextColor: "#111111"
+
+                                    onAccepted: root.submit()
+                                    Keys.onEscapePressed: root.dismiss()
                                 }
                             }
                         }
