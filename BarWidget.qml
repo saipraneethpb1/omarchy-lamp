@@ -108,7 +108,10 @@ BarWidget {
         foreground: root.lit
             ? (root.overtime ? root.overtimeColor : root.lampColor)
             : (root.bar ? root.bar.barForeground : Color.foreground)
-        text: root.lit ? "◉  " + Model.shorten(root.intention, 28) + "  " + root.elapsed : "○  Lamp"
+        // One space after the glyph, two between intention and clock: the gap
+        // separating a mark from its label should read tighter than the gap
+        // separating two fields.
+        text: root.lit ? "◉ " + Model.shorten(root.intention, 28) + "  " + root.elapsed : "○ Lamp"
         tooltipText: root.lit
             ? (root.overtime
                 ? "Over the " + Model.formatTarget(root.targetSeconds) + " you planned \u00b7 click to put it out"
