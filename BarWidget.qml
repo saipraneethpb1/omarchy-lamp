@@ -7,7 +7,7 @@ import "Model.js" as Model
 
 BarWidget {
     id: root
-    moduleName: "lamp.session"
+    moduleName: "saipraneethpb1.lamp"
 
     // The one Service.qml instance the shell mounts for this plugin, shared
     // with the overlay so both surfaces show the same flame. serviceFor() is a
@@ -16,7 +16,7 @@ BarWidget {
     // makes this re-evaluate once the service is ready. If that internal name
     // ever goes away, lamp stays null and the widget renders its unlit state.
     readonly property var lamp: (bar && bar.shell && bar.shell._services)
-        ? bar.shell.serviceFor("lamp.session") : null
+        ? bar.shell.serviceFor("saipraneethpb1.lamp") : null
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
@@ -91,7 +91,7 @@ BarWidget {
     }
 
     IpcHandler {
-        target: "lamp.session"
+        target: "saipraneethpb1.lamp"
 
         function open(): void { root.open() }
         function close(): void { root.close() }

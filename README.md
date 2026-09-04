@@ -17,25 +17,25 @@ Omarchy is an agentic OS that still belongs to a person. Lamp is the human half 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/you/omarchy-lamp.git --enable
+omarchy plugin add https://github.com/saipraneethpb1/omarchy-lamp.git --enable
 ```
 
 Then place **Lamp** in the bar from `Setup > Plugins` if it is not already there, or:
 
 ```bash
-omarchy plugin enable lamp.session --section center
+omarchy plugin enable saipraneethpb1.lamp --section center
 ```
 
 Summon without the bar:
 
 ```bash
-omarchy-shell shell toggle lamp.session '{}'
+omarchy-shell shell toggle saipraneethpb1.lamp '{}'
 ```
 
 Optional keybind in `~/.config/hypr/bindings.lua` after checking `omarchy menu keybindings --print`:
 
 ```lua
-o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle lamp.session '{}'")
+o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle saipraneethpb1.lamp '{}'")
 ```
 
 ## Use
@@ -82,14 +82,14 @@ Example journal page:
 ## Remove
 
 ```bash
-omarchy plugin disable lamp.session
-omarchy plugin remove lamp.session
+omarchy plugin disable saipraneethpb1.lamp
+omarchy plugin remove saipraneethpb1.lamp
 ```
 
 Or by hand:
 
 ```bash
-rm -rf ~/.config/omarchy/plugins/lamp.session
+rm -rf ~/.config/omarchy/plugins/saipraneethpb1.lamp
 omarchy-shell shell rescanPlugins
 ```
 

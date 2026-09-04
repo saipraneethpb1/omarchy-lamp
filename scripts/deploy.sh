@@ -4,7 +4,7 @@
 set -euo pipefail
 
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dest="$HOME/.config/omarchy/plugins/lamp.session"
+dest="$HOME/.config/omarchy/plugins/saipraneethpb1.lamp"
 
 rm -rf "$dest"
 mkdir -p "$dest"

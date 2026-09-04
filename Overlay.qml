@@ -17,7 +17,7 @@ Item {
     // extinguishing here moves the bar too. Reading shell._services keeps the
     // binding live until the service actually loads — see BarWidget.qml.
     readonly property var lamp: (shell && shell._services)
-        ? shell.serviceFor("lamp.session") : null
+        ? shell.serviceFor("saipraneethpb1.lamp") : null
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
@@ -53,7 +53,7 @@ Item {
     function dismiss() {
         root.close()
         if (root.shell && typeof root.shell.hide === "function")
-            root.shell.hide("lamp.session")
+            root.shell.hide("saipraneethpb1.lamp")
     }
 
     function toggle(payloadJson) {

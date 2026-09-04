@@ -6,7 +6,7 @@ import "Model.js" as Model
 
 Panel {
     id: root
-    moduleName: "lamp.session"
+    moduleName: "saipraneethpb1.lamp"
     manageIpc: false
 
     property var anchorItem: null

@@ -105,6 +105,6 @@ Item {
 
     function toggleOverlay() {
         if (typeof Quickshell !== "undefined")
-            Quickshell.execDetached(["omarchy-shell", "shell", "toggle", "lamp.session", "{}"])
+            Quickshell.execDetached(["omarchy-shell", "shell", "toggle", "saipraneethpb1.lamp", "{}"])
     }
 }
