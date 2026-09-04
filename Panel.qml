@@ -130,6 +130,7 @@ Panel {
                 TextField {
                     id: field
                     width: parent.width
+                    focus: true
                     placeholderText: root.lit ? "What moved? (optional)" : "One sentence of intention"
                     foreground: root.barForeground
                     font.family: root.bar ? root.bar.fontFamily : Style.font.family

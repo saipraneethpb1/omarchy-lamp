@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Ui
 import "Model.js" as Model
 
@@ -75,6 +76,16 @@ BarWidget {
             root.injectPanel()
             Qt.callLater(root.injectPanel)
         }
+    }
+
+    IpcHandler {
+        target: "lamp.session"
+
+        function open(): void { root.open() }
+        function close(): void { root.close() }
+        function show(): void { root.open() }
+        function hide(): void { root.close() }
+        function toggle(): void { root.togglePanel() }
     }
 
     WidgetButton {
