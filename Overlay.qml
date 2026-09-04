@@ -190,7 +190,6 @@ Item {
                                 selectByMouse: true
                                 selectionColor: "#e8c36a"
                                 selectedTextColor: "#111111"
-                                cursorVisible: activeFocus
 
                                 onTextChanged: root.draft = text
                                 onAccepted: root.submit()

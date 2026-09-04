@@ -25,9 +25,12 @@ Panel {
         root.draft = ""
         root.controller.show()
         Qt.callLater(function() { field.forceActiveFocus() })
+        focusRetry.remaining = 30
+        focusRetry.start()
     }
 
     function close() {
+        focusRetry.stop()
         root.controller.hide()
     }
 
@@ -59,6 +62,24 @@ Panel {
         lamp.light(text)
         field.clear()
         root.close()
+    }
+
+    // KeyboardPanel forces focus once, on open. That fires before the
+    // layer-shell surface finishes its keyboard-focus prime (~75ms), so the
+    // field can come up without a caret. Keep asking until it takes.
+    Timer {
+        id: focusRetry
+        interval: 50
+        repeat: true
+        property int remaining: 0
+        onTriggered: {
+            if (field.activeFocus || remaining <= 0) {
+                stop()
+                return
+            }
+            field.forceActiveFocus()
+            remaining -= 1
+        }
     }
 
     KeyboardPanel {
