@@ -2,6 +2,8 @@
 
 Light a session with one sentence of intention.
 
+![Lamp in the Omarchy bar, lit, with the session panel open](preview.png)
+
 The bar holds a quiet flame and an elapsed clock until you put it out. When you extinguish it, Lamp asks what moved, then appends a page to a local markdown journal. No account. No network. No extra packages.
 
 This is the opposite of a streak tracker. It does not block websites, swap your wallpaper, or start a 25-minute timer. It gives the desktop a beginning and an end.
