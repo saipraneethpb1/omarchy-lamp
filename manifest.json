@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "lamp.session",
+  "name": "Lamp",
+  "version": "1.0.0",
+  "author": "You",
+  "license": "MIT",
+  "description": "Light a session with one sentence of intention. The bar holds the flame until you put it out and write what moved.",
+  "homepage": "https://github.com/you/omarchy-lamp",
+  "keywords": ["focus", "session", "writing", "journal", "deep-work"],
+  "kinds": ["service", "bar-widget", "overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml",
+    "overlay": "Overlay.qml"
+  },
+  "barWidget": {
+    "displayName": "Lamp",
+    "description": "Light or extinguish a work session",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}

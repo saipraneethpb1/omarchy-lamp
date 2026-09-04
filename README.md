@@ -1,0 +1,110 @@
+# Lamp
+
+Light a session with one sentence of intention.
+
+The bar holds a quiet flame and an elapsed clock until you put it out. When you extinguish it, Lamp asks what moved, then appends a page to a local markdown journal. No account. No network. No extra packages.
+
+This is the opposite of a streak tracker. It does not block websites, swap your wallpaper, or start a 25-minute timer. It gives the desktop a beginning and an end.
+
+## Why this exists
+
+The Omarchy marketplace already has clocks, sports scores, AI usage meters, marketplace browsers, website blockers, pomodoros, workspace modes, and desktop pets.
+
+What it does not have is a *session*.
+
+Omarchy is an agentic OS that still belongs to a person. Lamp is the human half of that sentence: you say what this stretch of time is for, you do the work, you write one line about what actually moved. Agents can keep running. The machine remembers the work as prose, not as a dashboard.
+
+## Install
+
+```bash
+omarchy plugin add https://github.com/you/omarchy-lamp.git --enable
+```
+
+Then place **Lamp** in the bar from `Setup > Plugins` if it is not already there, or:
+
+```bash
+omarchy plugin enable lamp.session --section center
+```
+
+Summon without the bar:
+
+```bash
+omarchy-shell shell toggle lamp.session '{}'
+```
+
+Optional keybind in `~/.config/hypr/bindings.lua` after checking `omarchy menu keybindings --print`:
+
+```lua
+o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle lamp.session '{}'")
+```
+
+## Use
+
+1. Click the bar or hit the keybind.
+2. Type one sentence. Example: `Finish the marketplace submission for Lamp`.
+3. Enter lights it. The bar reads `◉ Finish the marketplace…  47m`.
+4. Click again when you stop. Type what moved, or leave it blank.
+5. Escape closes the overlay without changing the session.
+
+## Files it writes
+
+| Path | What |
+|---|---|
+| `~/.local/state/omarchy/lamp/session.json` | Current flame |
+| `~/.local/share/omarchy-lamp/YYYY-MM-DD.md` | Daily journal |
+
+Both stay on this machine. Removal does not delete them.
+
+Example journal page:
+
+```markdown
+# 2026-09-04
+
+## 2026-09-04T10:41:00+05:30 → 2026-09-04T12:03:00+05:30
+
+**Intention:** Finish the marketplace submission for Lamp
+
+**What moved:** Manifest, overlay, and the first honest README
+```
+
+## Requirements
+
+- Omarchy Quattro (`omarchy-shell`)
+- Python 3 from the Omarchy install (stdlib only)
+- No network, no extra packages, no sudo, no install hook
+
+## Remove
+
+```bash
+omarchy plugin disable lamp.session
+omarchy plugin remove lamp.session
+```
+
+Or by hand:
+
+```bash
+rm -rf ~/.config/omarchy/plugins/lamp.session
+omarchy-shell shell rescanPlugins
+```
+
+Optional cleanup of local pages:
+
+```bash
+rm -rf ~/.local/state/omarchy/lamp ~/.local/share/omarchy-lamp
+```
+
+## Validate
+
+```bash
+omarchy plugin validate .
+```
+
+## Security
+
+Lamp runs inside `omarchy-shell` with your user permissions, like every other plugin. The helper `scripts/lamp.py` only reads and writes the two paths above. It does not spawn a shell, does not touch your theme, and does not call the network.
+
+Marketplace listing is not a security audit. Read the three QML files and the helper before you enable it.
+
+## License
+
+MIT
