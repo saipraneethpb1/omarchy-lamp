@@ -21,9 +21,10 @@ Panel {
     function open() {
         if (lamp && typeof lamp.refresh === "function")
             lamp.refresh()
+        field.clear()
         root.draft = ""
         root.controller.show()
-        Qt.callLater(function() { inputItem.forceActiveFocus() })
+        Qt.callLater(function() { field.forceActiveFocus() })
     }
 
     function close() {
@@ -49,14 +50,14 @@ Panel {
         const text = root.draft.trim()
         if (root.lit) {
             lamp.extinguish(text)
-            root.draft = ""
+            field.clear()
             root.close()
             return
         }
         if (!text.length)
             return
         lamp.light(text)
-        root.draft = ""
+        field.clear()
         root.close()
     }
 
@@ -66,88 +67,72 @@ Panel {
         owner: root.hostWidget || root
         bar: root.bar
         open: root.opened
-        focusTarget: inputItem
+        focusTarget: field
         contentWidth: panel.fittedContentWidth(Style.space(280))
         contentHeight: panel.fittedContentHeight(content.implicitHeight)
 
         PanelKeyCatcher {
             anchors.fill: parent
-            blocked: true
+            // The field owns the keys whenever it has focus, so it can carry a
+            // real cursor, selection, and paste. Escape and Tab move onto it
+            // below, since a blocked catcher emits no signals of its own.
+            blocked: field.activeFocus
             onCloseRequested: root.close()
             onTabRequested: function(direction) { root.switchPanel(direction) }
 
-            Item {
-                id: inputItem
-                anchors.fill: parent
-                focus: true
+            Column {
+                id: content
+                width: parent.width
+                spacing: Style.space(8)
 
-                Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_Escape) {
-                        root.close()
-                        event.accepted = true
-                        return
-                    }
-                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        root.submit()
-                        event.accepted = true
-                        return
-                    }
-                    if (event.key === Qt.Key_Backspace) {
-                        root.draft = root.draft.slice(0, Math.max(0, root.draft.length - 1))
-                        event.accepted = true
-                        return
-                    }
-                    if (event.text && event.text.length > 0 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
-                        root.draft += event.text
-                        event.accepted = true
+                Text {
+                    width: parent.width
+                    text: root.lit ? "Put the lamp out" : "Light a lamp"
+                    color: root.barForeground
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+
+                Text {
+                    width: parent.width
+                    visible: root.lit
+                    text: root.intention + (root.elapsed.length ? ("  \u00b7  " + root.elapsed) : "")
+                    color: root.barForeground
+                    opacity: 0.7
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.body
+                    wrapMode: Text.WordWrap
+                }
+
+                TextField {
+                    id: field
+                    width: parent.width
+                    placeholderText: root.lit ? "What moved? (optional)" : "One sentence of intention"
+                    foreground: root.barForeground
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.body
+
+                    onTextChanged: root.draft = text
+                    onAccepted: root.submit()
+                    Keys.onEscapePressed: root.close()
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                            root.switchPanel((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)
+                            event.accepted = true
+                        }
                     }
                 }
 
-                Column {
-                    id: content
+                Text {
                     width: parent.width
-                    spacing: Style.space(8)
-
-                    Text {
-                        width: parent.width
-                        text: root.lit ? "Put the lamp out" : "Light a lamp"
-                        color: root.barForeground
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.body
-                        font.bold: true
-                        wrapMode: Text.WordWrap
-                    }
-
-                    Text {
-                        width: parent.width
-                        visible: root.lit
-                        text: root.intention + (root.elapsed.length ? ("  ·  " + root.elapsed) : "")
-                        color: root.barForeground
-                        opacity: 0.7
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.body
-                        wrapMode: Text.WordWrap
-                    }
-
-                    Text {
-                        width: parent.width
-                        text: root.draft.length ? root.draft : (root.lit ? "What moved? (optional)" : "One sentence of intention")
-                        color: root.barForeground
-                        opacity: root.draft.length ? 1 : 0.45
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.body
-                        wrapMode: Text.Wrap
-                    }
-
-                    Text {
-                        width: parent.width
-                        text: root.lit ? "Enter to extinguish · Esc to leave it lit" : "Type, then Enter · Esc to close"
-                        color: root.barForeground
-                        opacity: 0.4
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.body
-                        wrapMode: Text.WordWrap
-                    }
+                    text: root.lit ? "Enter to extinguish \u00b7 Esc to leave it lit" : "Type, then Enter \u00b7 Esc to close"
+                    color: root.barForeground
+                    opacity: 0.4
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.body
+                    wrapMode: Text.WordWrap
                 }
             }
         }

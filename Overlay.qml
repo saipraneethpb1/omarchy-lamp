@@ -22,11 +22,11 @@ Item {
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
 
     function open(payloadJson) {
-        root.draft = ""
+        field.clear()
         if (lamp)
             lamp.refresh()
         root.opened = true
-        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+        Qt.callLater(function() { field.forceActiveFocus() })
         focusRetry.remaining = 30
         focusRetry.start()
     }
@@ -55,19 +55,19 @@ Item {
         const text = root.draft.trim()
         if (root.lit) {
             lamp.extinguish(text)
-            root.draft = ""
+            field.clear()
             root.dismiss()
             return
         }
         if (!text.length)
             return
         lamp.light(text)
-        root.draft = ""
+        field.clear()
         root.dismiss()
     }
 
     function lightPreset(name) {
-        root.draft = name
+        field.text = name
         submit()
     }
 
@@ -77,11 +77,11 @@ Item {
         repeat: true
         property int remaining: 0
         onTriggered: {
-            if (keyCatcher.activeFocus || remaining <= 0) {
+            if (field.activeFocus || remaining <= 0) {
                 stop()
                 return
             }
-            keyCatcher.forceActiveFocus()
+            field.forceActiveFocus()
             remaining -= 1
         }
     }
@@ -124,35 +124,13 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: keyCatcher.forceActiveFocus()
+                    onClicked: field.forceActiveFocus()
                 }
 
                 Item {
                     id: keyCatcher
                     anchors.fill: parent
-                    focus: true
-                    Keys.priority: Keys.BeforeItem
-                    Keys.onPressed: function(event) {
-                        if (event.key === Qt.Key_Escape) {
-                            root.dismiss()
-                            event.accepted = true
-                            return
-                        }
-                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            root.submit()
-                            event.accepted = true
-                            return
-                        }
-                        if (event.key === Qt.Key_Backspace) {
-                            root.draft = root.draft.slice(0, Math.max(0, root.draft.length - 1))
-                            event.accepted = true
-                            return
-                        }
-                        if (event.text && event.text.length > 0 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
-                            root.draft += event.text
-                            event.accepted = true
-                        }
-                    }
+                    Keys.onEscapePressed: root.dismiss()
 
                     Column {
                         id: cardBody
@@ -191,12 +169,32 @@ Item {
                             Text {
                                 anchors.fill: parent
                                 anchors.margins: 12
-                                text: root.draft.length ? root.draft : "Your intention…"
+                                visible: field.text.length === 0
+                                text: root.lit ? "What moved? (optional)" : "Your intention…"
                                 color: "white"
-                                opacity: root.draft.length ? 1 : 0.35
+                                opacity: 0.35
                                 font.pixelSize: 16
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
+                            }
+
+                            TextInput {
+                                id: field
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                focus: true
+                                color: "white"
+                                font.pixelSize: 16
+                                verticalAlignment: Text.AlignVCenter
+                                clip: true
+                                selectByMouse: true
+                                selectionColor: "#e8c36a"
+                                selectedTextColor: "#111111"
+                                cursorVisible: activeFocus
+
+                                onTextChanged: root.draft = text
+                                onAccepted: root.submit()
+                                Keys.onEscapePressed: root.dismiss()
                             }
                         }
 
