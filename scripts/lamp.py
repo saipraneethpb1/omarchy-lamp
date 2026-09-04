@@ -12,7 +12,7 @@ from pathlib import Path
 STATE_DIR = Path.home() / ".local" / "state" / "omarchy" / "lamp"
 SHARE_DIR = Path.home() / ".local" / "share" / "omarchy-lamp"
 SESSION_PATH = STATE_DIR / "session.json"
-MAX_TARGET_MINUTES = 24 * 60
+MAX_TARGET_SECONDS = 24 * 60 * 60
 
 
 def now_iso() -> str:
@@ -23,21 +23,33 @@ def today_stamp() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d")
 
 
-def format_minutes(total: int) -> str:
-    total = max(0, int(total))
-    hours, minutes = divmod(total, 60)
-    if hours and minutes:
-        return f"{hours}h {minutes}m"
+def format_duration(total_seconds: int) -> str:
+    total = clamp_seconds(total_seconds)
+    hours, rest = divmod(total, 3600)
+    minutes, seconds = divmod(rest, 60)
+    parts = []
     if hours:
-        return f"{hours}h"
-    return f"{minutes}m"
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
-def clamp_minutes(value) -> int:
+def clamp_seconds(value) -> int:
     try:
-        return max(0, min(MAX_TARGET_MINUTES, int(value)))
+        return max(0, min(MAX_TARGET_SECONDS, int(value)))
     except (TypeError, ValueError):
         return 0
+
+
+def session_target(session: dict) -> int:
+    """Target in seconds, tolerating sessions written before seconds existed."""
+    seconds = clamp_seconds(session.get("targetSeconds"))
+    if seconds:
+        return seconds
+    return clamp_seconds(clamp_seconds(session.get("targetMinutes")) * 60)
 
 
 def load_session() -> dict:
@@ -76,7 +88,7 @@ def cmd_status() -> int:
     return 0
 
 
-def cmd_light(intention: str, target_minutes: int = 0) -> int:
+def cmd_light(intention: str, target_seconds: int = 0) -> int:
     intention = " ".join(intention.split()).strip()
     if not intention:
         print(json.dumps({"error": "empty-intention"}))
@@ -89,7 +101,7 @@ def cmd_light(intention: str, target_minutes: int = 0) -> int:
         "startedAt": now_iso(),
         "endedAt": None,
         "close": None,
-        "targetMinutes": clamp_minutes(target_minutes) or None,
+        "targetSeconds": clamp_seconds(target_seconds) or None,
     }
     save_session(session)
     print(json.dumps(session, ensure_ascii=False))
@@ -115,9 +127,9 @@ def cmd_extinguish(close: str) -> int:
         "",
         f"**Intention:** {intention}",
     ]
-    target = clamp_minutes(session.get("targetMinutes"))
+    target = session_target(session)
     if target:
-        lines += ["", f"**Planned:** {format_minutes(target)}"]
+        lines += ["", f"**Planned:** {format_duration(target)}"]
     if close:
         lines += ["", f"**What moved:** {close}"]
     path = append_journal("\n".join(lines))
@@ -137,10 +149,10 @@ def main(argv: list[str]) -> int:
     if action == "light":
         args = argv[1:]
         target = 0
-        # "light --for <minutes> <intention...>"; the flag is optional so the
+        # "light --for <seconds> <intention...>"; the flag is optional so the
         # older "light <intention...>" form still works.
         if len(args) >= 2 and args[0] == "--for":
-            target = clamp_minutes(args[1])
+            target = clamp_seconds(args[1])
             args = args[2:]
         return cmd_light(" ".join(args).strip(), target)
     if action == "extinguish":

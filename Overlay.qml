@@ -21,14 +21,22 @@ Item {
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
-    readonly property int lamptargetMinutes: lamp ? (lamp.targetMinutes || 0) : 0
+    readonly property int lampTargetSeconds: lamp ? (lamp.targetSeconds || 0) : 0
     readonly property bool overtime: lamp ? lamp.overtime === true : false
 
-    readonly property int targetMinutes: Model.parseDuration(durationField.text)
+    readonly property int targetSeconds: Model.targetFrom(hoursField.text, minutesField.text, secondsField.text)
+
+    function setTarget(hours, minutes, seconds) {
+        hoursField.text = hours > 0 ? String(hours) : ""
+        minutesField.text = minutes > 0 ? String(minutes) : ""
+        secondsField.text = seconds > 0 ? String(seconds) : ""
+    }
+
+    function clearTarget() { root.setTarget(0, 0, 0) }
 
     function open(payloadJson) {
         field.clear()
-        durationField.clear()
+        root.clearTarget()
         if (lamp)
             lamp.refresh()
         root.opened = true
@@ -62,15 +70,15 @@ Item {
         if (root.lit) {
             lamp.extinguish(text)
             field.clear()
-            durationField.clear()
+            root.clearTarget()
             root.dismiss()
             return
         }
         if (!text.length)
             return
-        lamp.light(text, root.targetMinutes)
+        lamp.light(text, root.targetSeconds)
         field.clear()
-        durationField.clear()
+        root.clearTarget()
         root.dismiss()
     }
 
@@ -164,7 +172,7 @@ Item {
                             text: root.lit
                                   ? (root.intention
                                      + (root.elapsed.length ? ("  ·  " + root.elapsed) : "")
-                                     + (root.lamptargetMinutes > 0 ? (" of " + Model.formatTarget(root.lamptargetMinutes)) : ""))
+                                     + (root.lampTargetSeconds > 0 ? (" of " + Model.formatTarget(root.lampTargetSeconds)) : ""))
                                   : "Type a sentence, then press Enter or click Light."
                         }
 
@@ -243,7 +251,7 @@ Item {
                                 Rectangle {
                                     id: chip
                                     required property int modelData
-                                    readonly property bool picked: root.targetMinutes === modelData
+                                    readonly property bool picked: root.targetSeconds === chip.modelData * 60
                                     width: 72
                                     height: 30
                                     radius: 6
@@ -251,7 +259,7 @@ Item {
                                     z: 8
                                     Text {
                                         anchors.centerIn: parent
-                                        text: Model.formatTarget(chip.modelData)
+                                        text: Model.formatTarget(chip.modelData * 60)
                                         color: chip.picked ? "#111111" : "white"
                                         font.pixelSize: 13
                                     }
@@ -259,15 +267,24 @@ Item {
                                         anchors.fill: parent
                                         z: 9
                                         onClicked: {
-                                            durationField.text = chip.picked ? "" : String(chip.modelData)
+                                            if (chip.picked) root.clearTarget()
+                                            else root.setTarget(0, chip.modelData, 0)
                                             field.forceActiveFocus()
                                         }
                                     }
                                 }
                             }
 
-                            Rectangle {
-                                width: 132
+                        }
+
+                        Row {
+                            spacing: 8
+                            visible: !root.lit
+
+                            component UnitBox: Rectangle {
+                                property alias text: entry.text
+                                property string label: ""
+                                width: 88
                                 height: 30
                                 radius: 6
                                 color: Qt.rgba(1, 1, 1, 0.08)
@@ -277,8 +294,8 @@ Item {
                                 Text {
                                     anchors.fill: parent
                                     anchors.margins: 8
-                                    visible: durationField.text.length === 0
-                                    text: "No limit"
+                                    visible: entry.text.length === 0
+                                    text: parent.label
                                     color: "white"
                                     opacity: 0.35
                                     font.pixelSize: 13
@@ -286,7 +303,7 @@ Item {
                                 }
 
                                 TextInput {
-                                    id: durationField
+                                    id: entry
                                     anchors.fill: parent
                                     anchors.margins: 8
                                     color: "white"
@@ -296,11 +313,17 @@ Item {
                                     selectByMouse: true
                                     selectionColor: "#e8c36a"
                                     selectedTextColor: "#111111"
+                                    inputMethodHints: Qt.ImhDigitsOnly
+                                    validator: IntValidator { bottom: 0; top: 999 }
 
                                     onAccepted: root.submit()
                                     Keys.onEscapePressed: root.dismiss()
                                 }
                             }
+
+                            UnitBox { id: hoursField; label: "hours" }
+                            UnitBox { id: minutesField; label: "min" }
+                            UnitBox { id: secondsField; label: "sec" }
                         }
 
                         Rectangle {

@@ -20,7 +20,7 @@ BarWidget {
     readonly property bool lit: lamp ? lamp.lit === true : false
     readonly property string intention: lamp ? (lamp.intention || "") : ""
     readonly property string elapsed: lamp ? (lamp.elapsed || "") : ""
-    readonly property int targetMinutes: lamp ? (lamp.targetMinutes || 0) : 0
+    readonly property int targetSeconds: lamp ? (lamp.targetSeconds || 0) : 0
     readonly property bool overtime: lamp ? lamp.overtime === true : false
 
     // Warm lamplight for the lit state, matching the overlay's accent. Held as
@@ -111,7 +111,7 @@ BarWidget {
         text: root.lit ? "◉  " + Model.shorten(root.intention, 28) + "  " + root.elapsed : "○  Lamp"
         tooltipText: root.lit
             ? (root.overtime
-                ? "Over the " + Model.formatTarget(root.targetMinutes) + " you planned \u00b7 click to put it out"
+                ? "Over the " + Model.formatTarget(root.targetSeconds) + " you planned \u00b7 click to put it out"
                 : "Click to put the lamp out")
             : "Click to light a session"
         horizontalMargin: 8.75

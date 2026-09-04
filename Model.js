@@ -2,17 +2,28 @@
 
 function formatElapsed(startedAt) {
     if (!startedAt)
-        return "0m"
+        return "0s"
     var start = Date.parse(startedAt)
     if (isNaN(start))
-        return "0m"
-    var seconds = Math.max(0, Math.floor((Date.now() - start) / 1000))
-    var hours = Math.floor(seconds / 3600)
-    var minutes = Math.floor((seconds % 3600) / 60)
+        return "0s"
+    return formatClock(Math.max(0, Math.floor((Date.now() - start) / 1000)))
+}
+
+function pad2(value) {
+    return value < 10 ? "0" + value : String(value)
+}
+
+// Always carries seconds, so the label changes every tick rather than resting
+// on a whole minute for 60 seconds.
+function formatClock(totalSeconds) {
+    var total = Math.max(0, Math.floor(totalSeconds))
+    var hours = Math.floor(total / 3600)
+    var minutes = Math.floor((total % 3600) / 60)
+    var seconds = total % 60
     if (hours > 0)
-        return hours + "h " + minutes + "m"
+        return hours + "h " + pad2(minutes) + "m " + pad2(seconds) + "s"
     if (minutes > 0)
-        return minutes + "m"
+        return minutes + "m " + pad2(seconds) + "s"
     return seconds + "s"
 }
 
@@ -33,52 +44,47 @@ function parseSession(text) {
     return { lit: false }
 }
 
-var MAX_TARGET_MINUTES = 24 * 60
+var MAX_TARGET_SECONDS = 24 * 60 * 60
 
-function clampMinutes(value) {
+function toInt(text) {
+    var n = parseInt(String(text || "").trim(), 10)
+    return isNaN(n) || n < 0 ? 0 : n
+}
+
+function clampSeconds(value) {
     var n = parseInt(value, 10)
     if (isNaN(n))
         return 0
-    return Math.max(0, Math.min(MAX_TARGET_MINUTES, n))
+    return Math.max(0, Math.min(MAX_TARGET_SECONDS, n))
 }
 
-// Accepts "45", "45m", "2h", "1h30", "1h30m". Anything else means no target,
-// so a typo quietly lights an untimed session rather than inventing a deadline.
-function parseDuration(text) {
-    var value = (text || "").trim().toLowerCase().replace(/\s+/g, "")
-    if (!value)
-        return 0
-    var hm = value.match(/^(\d+)h(\d+)m?$/)
-    if (hm)
-        return clampMinutes(parseInt(hm[1], 10) * 60 + parseInt(hm[2], 10))
-    var h = value.match(/^(\d+)h$/)
-    if (h)
-        return clampMinutes(parseInt(h[1], 10) * 60)
-    var m = value.match(/^(\d+)m?$/)
-    if (m)
-        return clampMinutes(parseInt(m[1], 10))
-    return 0
+function targetFrom(hours, minutes, seconds) {
+    return clampSeconds(toInt(hours) * 3600 + toInt(minutes) * 60 + toInt(seconds))
 }
 
-function formatTarget(minutes) {
-    var total = clampMinutes(minutes)
+function formatTarget(totalSeconds) {
+    var total = clampSeconds(totalSeconds)
     if (!total)
         return ""
-    var hours = Math.floor(total / 60)
-    var mins = total % 60
-    if (hours && mins)
-        return hours + "h " + mins + "m"
+    var hours = Math.floor(total / 3600)
+    var minutes = Math.floor((total % 3600) / 60)
+    var seconds = total % 60
+    var parts = []
     if (hours)
-        return hours + "h"
-    return mins + "m"
+        parts.push(hours + "h")
+    if (minutes)
+        parts.push(minutes + "m")
+    if (seconds)
+        parts.push(seconds + "s")
+    return parts.join(" ")
 }
 
-function isOvertime(startedAt, targetMinutes) {
-    var target = clampMinutes(targetMinutes)
+function isOvertime(startedAt, targetSeconds) {
+    var target = clampSeconds(targetSeconds)
     if (!target || !startedAt)
         return false
     var start = Date.parse(startedAt)
     if (isNaN(start))
         return false
-    return (Date.now() - start) / 60000 >= target
+    return (Date.now() - start) / 1000 >= target
 }

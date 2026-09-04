@@ -17,7 +17,7 @@ Item {
     property string lastError: ""
     property string journalPath: ""
     property string elapsed: Model.formatElapsed(startedAt)
-    property int targetMinutes: 0
+    property int targetSeconds: 0
     // True once a lit session passes the minutes it was given. Recomputed on
     // the same tick as elapsed, so the bar turns over without a poll of its own.
     property bool overtime: false
@@ -34,7 +34,7 @@ Item {
         repeat: true
         onTriggered: {
             root.elapsed = Model.formatElapsed(root.startedAt)
-            root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetMinutes)
+            root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetSeconds)
         }
     }
 
@@ -68,9 +68,10 @@ Item {
         root.intention = data.intention || ""
         root.startedAt = data.startedAt || ""
         root.journalPath = data.journal || root.journalPath
-        root.targetMinutes = Model.clampMinutes(data.targetMinutes || 0)
+        root.targetSeconds = Model.clampSeconds(data.targetSeconds || 0)
+            || Model.clampSeconds(Model.clampSeconds(data.targetMinutes || 0) * 60)
         root.elapsed = Model.formatElapsed(root.startedAt)
-        root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetMinutes)
+        root.overtime = root.lit && Model.isOvertime(root.startedAt, root.targetSeconds)
     }
 
     function refresh() {
@@ -80,12 +81,12 @@ Item {
         reader.running = true
     }
 
-    function light(text, minutes) {
+    function light(text, seconds) {
         const intention = (text || "").trim()
         if (!intention || writer.running)
             return
         root.lastError = ""
-        const target = Model.clampMinutes(minutes)
+        const target = Model.clampSeconds(seconds)
         const command = ["python3", root.helperPath(), "light"]
         if (target > 0)
             command.push("--for", String(target))

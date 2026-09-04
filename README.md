@@ -42,12 +42,11 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle lamp.session '{}
 
 1. Click the bar or hit the keybind.
 2. Type one sentence. Example: `Finish the marketplace submission for Lamp`.
-3. Optionally give yourself a time: press `↓` for the limit field, or click
-   `25m` / `50m` / `90m`. Type any of `45`, `45m`, `2h`, `1h30m`. Blank means
-   no limit.
-4. Enter lights it. The bar reads `◉ Finish the marketplace…  47m`.
-5. Past the time you set, the bar turns red — the lamp is still lit, you are
-   just over. Nothing interrupts you.
+3. Optionally give yourself a time: click `25m` / `50m` / `90m`, or press `↓`
+   and fill in hours, minutes, and seconds. Leave them blank for no limit.
+4. Enter lights it. The bar reads `◉ Finish the marketplace…  47m 12s`.
+5. Past the time you set, the bar turns red — the lamp is still lit and the
+   clock keeps running, you are just over. Nothing interrupts you.
 6. Click again when you stop. Type what moved, or leave it blank.
 7. Escape closes the overlay without changing the session.
 
