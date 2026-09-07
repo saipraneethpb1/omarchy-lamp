@@ -44,7 +44,7 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle saipraneethpb1.l
 
 1. Click the bar or hit the keybind.
 2. Type one sentence. Example: `Finish the marketplace submission for Lamp`.
-3. Optionally give yourself a time: click `25m` / `50m` / `90m`, or press
+3. Optionally give yourself a time: click `25m` / `50m` / `1h 30m`, or press
    `Tab` (or `↓`) and fill in hours, minutes, and seconds. Leave them blank
    for no limit.
 4. Enter lights it. The bar reads `◉ Finish the marketplace…  47m 12s`.
@@ -53,10 +53,15 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle saipraneethpb1.l
 6. Click again when you stop. Type what moved, or leave it blank.
 7. Escape closes the overlay without changing the session.
 
-`Tab` and `Shift+Tab` walk the fields, so the whole thing is reachable without
-a mouse. In the bar panel, tabbing past the last field hands focus on to the
-next bar panel the way every other Omarchy widget does; in the fullscreen
-overlay it wraps back to the top.
+`Tab` and `Shift+Tab` walk every control — the sentence, the presets, and the
+hour/minute/second fields — so the whole thing is reachable without a mouse.
+A focused preset takes `Enter` or `Space`.
+
+![The Lamp panel with the 50m preset focused by Tab](docs/keyboard.png)
+
+In the bar panel, tabbing past the last field hands focus on to the next bar
+panel the way every other Omarchy widget does; in the fullscreen overlay it
+wraps back to the top.
 
 ## Files it writes
 
