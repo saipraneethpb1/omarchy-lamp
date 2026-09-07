@@ -44,13 +44,19 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle saipraneethpb1.l
 
 1. Click the bar or hit the keybind.
 2. Type one sentence. Example: `Finish the marketplace submission for Lamp`.
-3. Optionally give yourself a time: click `25m` / `50m` / `90m`, or press `↓`
-   and fill in hours, minutes, and seconds. Leave them blank for no limit.
+3. Optionally give yourself a time: click `25m` / `50m` / `90m`, or press
+   `Tab` (or `↓`) and fill in hours, minutes, and seconds. Leave them blank
+   for no limit.
 4. Enter lights it. The bar reads `◉ Finish the marketplace…  47m 12s`.
 5. Past the time you set, the bar turns red — the lamp is still lit and the
    clock keeps running, you are just over. Nothing interrupts you.
 6. Click again when you stop. Type what moved, or leave it blank.
 7. Escape closes the overlay without changing the session.
+
+`Tab` and `Shift+Tab` walk the fields, so the whole thing is reachable without
+a mouse. In the bar panel, tabbing past the last field hands focus on to the
+next bar panel the way every other Omarchy widget does; in the fullscreen
+overlay it wraps back to the top.
 
 ## Files it writes
 
@@ -60,6 +66,27 @@ o.bind("SUPER + SHIFT + L", "Lamp", "omarchy-shell shell toggle saipraneethpb1.l
 | `~/.local/share/omarchy-lamp/YYYY-MM-DD.md` | Daily journal |
 
 Both stay on this machine. Removal does not delete them.
+
+### Journal folder
+
+The journal folder is configurable — point it at an Obsidian vault, a synced
+folder, or anywhere else you keep notes. Set `journalDir` on Lamp's entry in
+`~/.config/omarchy/shell.json`:
+
+```json
+{ "id": "saipraneethpb1.lamp", "journalDir": "~/Documents/Vault/Work Log" }
+```
+
+Then `omarchy-shell shell reloadConfig`. `~` and `$VARS` are expanded, the
+folder is created on demand, and an empty or missing value keeps the default
+above. Pages already written stay where they are — this only changes where the
+next one lands.
+
+The helper takes the same setting directly, which is handy for scripting:
+
+```bash
+python3 scripts/lamp.py extinguish --journal-dir ~/Vault/Work "what moved"
+```
 
 Example journal page:
 
@@ -109,7 +136,7 @@ omarchy plugin validate .
 
 ## Security
 
-Lamp runs inside `omarchy-shell` with your user permissions, like every other plugin. The helper `scripts/lamp.py` only reads and writes the two paths above. It does not spawn a shell, does not touch your theme, and does not call the network.
+Lamp runs inside `omarchy-shell` with your user permissions, like every other plugin. The helper `scripts/lamp.py` only reads and writes the two paths above, or the journal folder you point it at. It does not spawn a shell, does not touch your theme, and does not call the network.
 
 Marketplace listing is not a security audit. Read the three QML files and the helper before you enable it.
 

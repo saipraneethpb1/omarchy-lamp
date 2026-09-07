@@ -9,6 +9,15 @@ BarWidget {
     id: root
     moduleName: "saipraneethpb1.lamp"
 
+    // Inline settings from this widget's shell.json entry. Bar.qml assigns
+    // this on load and re-assigns it when the user edits the settings, so a
+    // changed journal directory takes effect without a restart.
+    property var settings: ({})
+    readonly property string journalDir: {
+        const value = settings ? settings.journalDir : ""
+        return (value === undefined || value === null) ? "" : String(value).trim()
+    }
+
     // The one Service.qml instance the shell mounts for this plugin, shared
     // with the overlay so both surfaces show the same flame. serviceFor() is a
     // plain function, so the binding also reads shell._services — that property
@@ -74,10 +83,22 @@ BarWidget {
         if ("lamp" in target) target.lamp = root.lamp
     }
 
+    // The service is shared with the overlay, so pushing the setting onto it
+    // is what makes both surfaces write to the same place.
+    function pushSettings() {
+        if (root.lamp && "journalDir" in root.lamp)
+            root.lamp.journalDir = root.journalDir
+    }
+
+    onJournalDirChanged: pushSettings()
+
     onBarChanged: injectPanel()
     // The service can resolve after the panel loads; without this the panel
     // holds a null lamp forever and submit() silently does nothing.
-    onLampChanged: injectPanel()
+    onLampChanged: {
+        injectPanel()
+        pushSettings()
+    }
 
     Loader {
         id: panelLoader

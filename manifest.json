@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "saipraneethpb1.lamp",
   "name": "Lamp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Sai Praneeth",
   "license": "MIT",
   "description": "Light a session with one sentence of intention. The bar holds the flame until you put it out and write what moved.",
@@ -30,6 +30,18 @@
     "description": "Light or extinguish a work session",
     "category": "Productivity",
     "allowMultiple": false,
-    "defaultSection": "center"
+    "defaultSection": "center",
+    "defaults": {
+      "journalDir": ""
+    },
+    "schema": [
+      {
+        "key": "journalDir",
+        "type": "path",
+        "label": "Journal folder",
+        "defaultValue": "",
+        "description": "Where daily session notes are written. Leave empty for the default, ~/.local/share/omarchy-lamp. Point it at an Obsidian vault folder to keep sessions with your notes."
+      }
+    ]
   }
 }

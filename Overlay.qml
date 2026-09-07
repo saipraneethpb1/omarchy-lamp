@@ -34,6 +34,44 @@ Item {
 
     function clearTarget() { root.setTarget(0, 0, 0) }
 
+    // The card's fields in tab order. The duration row is hidden while a lamp
+    // is lit, so the chain shrinks with it.
+    readonly property var focusChain: root.lit
+        ? [field, writeChip, codeChip, readChip, submitButton]
+        : [field, writeChip, codeChip, readChip,
+           chip25, chip50, chip90,
+           hoursField.input, minutesField.input, secondsField.input,
+           submitButton]
+
+    // Unlike the bar panel there is no neighbouring surface to step out to, so
+    // Tab wraps around the card instead of handing focus back to the shell.
+    function moveFocus(direction) {
+        const chain = root.focusChain
+        let index = -1
+        for (let i = 0; i < chain.length; i++) {
+            if (chain[i] && chain[i].activeFocus) {
+                index = i
+                break
+            }
+        }
+        if (index < 0) {
+            if (chain[0])
+                chain[0].forceActiveFocus()
+            return
+        }
+        const target = chain[(index + direction + chain.length) % chain.length]
+        if (target)
+            target.forceActiveFocus()
+    }
+
+    function handleTab(event) {
+        if (event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab)
+            return
+        const back = event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier)
+        root.moveFocus(back ? -1 : 1)
+        event.accepted = true
+    }
+
     function open(payloadJson) {
         field.clear()
         root.clearTarget()
@@ -173,7 +211,7 @@ Item {
                                   ? (root.intention
                                      + (root.elapsed.length ? ("  ·  " + root.elapsed) : "")
                                      + (root.lampTargetSeconds > 0 ? (" of " + Model.formatTarget(root.lampTargetSeconds)) : ""))
-                                  : "Type a sentence, then press Enter or click Light."
+                                  : "Type a sentence, then press Enter \u00b7 Tab moves between fields."
                         }
 
                         Rectangle {
@@ -212,32 +250,54 @@ Item {
                                 onTextChanged: root.draft = text
                                 onAccepted: root.submit()
                                 Keys.onEscapePressed: root.dismiss()
+                                Keys.onDownPressed: root.moveFocus(1)
+                                Keys.onUpPressed: root.moveFocus(-1)
+                                Keys.onPressed: function(event) { root.handleTab(event) }
                             }
                         }
 
                         Row {
                             spacing: 8
-                            Repeater {
-                                model: ["Write", "Code", "Read"]
-                                Rectangle {
-                                    width: 72
-                                    height: 30
-                                    radius: 6
-                                    color: Qt.rgba(1, 1, 1, 0.12)
-                                    z: 8
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        color: "white"
-                                        font.pixelSize: 13
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        z: 9
-                                        onClicked: root.lightPreset(modelData)
-                                    }
+
+                            // A plain Rectangle takes no focus of its own, so
+                            // these opt in and answer Return/Space themselves.
+                            // The white ring is the only cue for where you are.
+                            component ActionChip: Rectangle {
+                                id: action
+                                property string label: ""
+                                width: 72
+                                height: 30
+                                radius: 6
+                                color: Qt.rgba(1, 1, 1, 0.12)
+                                border.width: action.activeFocus ? 2 : 0
+                                border.color: "white"
+                                z: 8
+                                activeFocusOnTab: true
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: action.label
+                                    color: "white"
+                                    font.pixelSize: 13
                                 }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    z: 9
+                                    onClicked: root.lightPreset(action.label)
+                                }
+
+                                Keys.onReturnPressed: root.lightPreset(action.label)
+                                Keys.onEnterPressed: root.lightPreset(action.label)
+                                Keys.onSpacePressed: root.lightPreset(action.label)
+                                Keys.onEscapePressed: root.dismiss()
+                                Keys.onDownPressed: root.moveFocus(1)
+                                Keys.onUpPressed: root.moveFocus(-1)
+                                Keys.onPressed: function(event) { root.handleTab(event) }
                             }
+
+                            ActionChip { id: writeChip; label: "Write" }
+                            ActionChip { id: codeChip; label: "Code" }
+                            ActionChip { id: readChip; label: "Read" }
                         }
 
                         Row {
@@ -245,36 +305,53 @@ Item {
                             spacing: 8
                             visible: !root.lit
 
-                            Repeater {
-                                model: [25, 50, 90]
+                            component DurationChip: Rectangle {
+                                id: chip
+                                property int minutes: 0
+                                readonly property bool picked: root.targetSeconds === chip.minutes * 60
+                                width: 72
+                                height: 30
+                                radius: 6
+                                color: chip.picked ? "#e8c36a" : Qt.rgba(1, 1, 1, 0.12)
+                                // White, not the accent: the ring has to read
+                                // against the amber fill of a picked chip too.
+                                border.width: chip.activeFocus ? 2 : 0
+                                border.color: "white"
+                                z: 8
+                                activeFocusOnTab: true
 
-                                Rectangle {
-                                    id: chip
-                                    required property int modelData
-                                    readonly property bool picked: root.targetSeconds === chip.modelData * 60
-                                    width: 72
-                                    height: 30
-                                    radius: 6
-                                    color: picked ? "#e8c36a" : Qt.rgba(1, 1, 1, 0.12)
-                                    z: 8
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: Model.formatTarget(chip.modelData * 60)
-                                        color: chip.picked ? "#111111" : "white"
-                                        font.pixelSize: 13
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        z: 9
-                                        onClicked: {
-                                            if (chip.picked) root.clearTarget()
-                                            else root.setTarget(0, chip.modelData, 0)
-                                            field.forceActiveFocus()
-                                        }
+                                function activate() {
+                                    if (chip.picked) root.clearTarget()
+                                    else root.setTarget(0, chip.minutes, 0)
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: Model.formatTarget(chip.minutes * 60)
+                                    color: chip.picked ? "#111111" : "white"
+                                    font.pixelSize: 13
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    z: 9
+                                    onClicked: {
+                                        chip.activate()
+                                        field.forceActiveFocus()
                                     }
                                 }
+
+                                Keys.onReturnPressed: chip.activate()
+                                Keys.onEnterPressed: chip.activate()
+                                Keys.onSpacePressed: chip.activate()
+                                Keys.onEscapePressed: root.dismiss()
+                                Keys.onDownPressed: root.moveFocus(1)
+                                Keys.onUpPressed: root.moveFocus(-1)
+                                Keys.onPressed: function(event) { root.handleTab(event) }
                             }
 
+                            DurationChip { id: chip25; minutes: 25 }
+                            DurationChip { id: chip50; minutes: 50 }
+                            DurationChip { id: chip90; minutes: 90 }
                         }
 
                         Row {
@@ -283,13 +360,14 @@ Item {
 
                             component UnitBox: Rectangle {
                                 property alias text: entry.text
+                                property alias input: entry
                                 property string label: ""
                                 width: 88
                                 height: 30
                                 radius: 6
                                 color: Qt.rgba(1, 1, 1, 0.08)
                                 border.width: 1
-                                border.color: Qt.rgba(1, 1, 1, 0.18)
+                                border.color: entry.activeFocus ? "white" : Qt.rgba(1, 1, 1, 0.18)
 
                                 Text {
                                     anchors.fill: parent
@@ -318,6 +396,9 @@ Item {
 
                                     onAccepted: root.submit()
                                     Keys.onEscapePressed: root.dismiss()
+                                    Keys.onDownPressed: root.moveFocus(1)
+                                    Keys.onUpPressed: root.moveFocus(-1)
+                                    Keys.onPressed: function(event) { root.handleTab(event) }
                                 }
                             }
 
@@ -327,11 +408,16 @@ Item {
                         }
 
                         Rectangle {
+                            id: submitButton
                             width: parent.width
                             height: 40
                             radius: 8
                             color: root.lit ? "#b85a3a" : "#e8c36a"
+                            border.width: submitButton.activeFocus ? 2 : 0
+                            border.color: "white"
                             z: 8
+                            activeFocusOnTab: true
+
                             Text {
                                 anchors.centerIn: parent
                                 text: root.lit ? "Extinguish" : "Light"
@@ -344,6 +430,13 @@ Item {
                                 z: 9
                                 onClicked: root.submit()
                             }
+
+                            Keys.onReturnPressed: root.submit()
+                            Keys.onEnterPressed: root.submit()
+                            Keys.onSpacePressed: root.submit()
+                            Keys.onEscapePressed: root.dismiss()
+                            Keys.onUpPressed: root.moveFocus(-1)
+                            Keys.onPressed: function(event) { root.handleTab(event) }
                         }
                     }
                 }

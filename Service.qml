@@ -16,6 +16,12 @@ Item {
     property string startedAt: ""
     property string lastError: ""
     property string journalPath: ""
+
+    // Where extinguish writes the journal. Empty means the helper's own
+    // default (~/.local/share/omarchy-lamp), so an unset setting changes
+    // nothing. Pushed in from BarWidget.qml, which is what the shell hands
+    // the inline shell.json settings to.
+    property string journalDir: ""
     property string elapsed: Model.formatElapsed(startedAt)
     property int targetSeconds: 0
     // True once a lit session passes the minutes it was given. Recomputed on
@@ -99,7 +105,11 @@ Item {
         if (writer.running)
             return
         root.lastError = ""
-        writer.command = ["python3", root.helperPath(), "extinguish", closeText || ""]
+        const command = ["python3", root.helperPath(), "extinguish"]
+        if (root.journalDir.length)
+            command.push("--journal-dir", root.journalDir)
+        command.push(closeText || "")
+        writer.command = command
         writer.running = true
     }
 

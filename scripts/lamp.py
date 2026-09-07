@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STATE_DIR = Path.home() / ".local" / "state" / "omarchy" / "lamp"
-SHARE_DIR = Path.home() / ".local" / "share" / "omarchy-lamp"
+DEFAULT_SHARE_DIR = Path.home() / ".local" / "share" / "omarchy-lamp"
 SESSION_PATH = STATE_DIR / "session.json"
 MAX_TARGET_SECONDS = 24 * 60 * 60
 
@@ -71,9 +71,17 @@ def save_session(data: dict) -> None:
     os.replace(tmp, SESSION_PATH)
 
 
-def append_journal(entry: str) -> Path:
-    SHARE_DIR.mkdir(parents=True, exist_ok=True)
-    path = SHARE_DIR / f"{today_stamp()}.md"
+def resolve_journal_dir(raw) -> Path:
+    """Where the journal lands. Empty or unset keeps the historical location."""
+    candidate = (raw or "").strip()
+    if not candidate:
+        return DEFAULT_SHARE_DIR
+    return Path(os.path.expanduser(os.path.expandvars(candidate)))
+
+
+def append_journal(entry: str, share_dir: Path) -> Path:
+    share_dir.mkdir(parents=True, exist_ok=True)
+    path = share_dir / f"{today_stamp()}.md"
     header_needed = not path.exists()
     with path.open("a", encoding="utf-8") as fh:
         if header_needed:
@@ -108,7 +116,7 @@ def cmd_light(intention: str, target_seconds: int = 0) -> int:
     return 0
 
 
-def cmd_extinguish(close: str) -> int:
+def cmd_extinguish(close: str, share_dir: Path) -> int:
     session = load_session()
     if not session.get("lit"):
         print(json.dumps({"error": "not-lit", "lit": False}))
@@ -132,7 +140,7 @@ def cmd_extinguish(close: str) -> int:
         lines += ["", f"**Planned:** {format_duration(target)}"]
     if close:
         lines += ["", f"**What moved:** {close}"]
-    path = append_journal("\n".join(lines))
+    path = append_journal("\n".join(lines), share_dir)
     out = dict(session)
     out["journal"] = str(path)
     print(json.dumps(out, ensure_ascii=False))
@@ -143,11 +151,18 @@ def main(argv: list[str]) -> int:
     if not argv:
         return cmd_status()
     action = argv[0]
-    rest = " ".join(argv[1:]).strip()
+    args = argv[1:]
+
+    # "--journal-dir <path>" is honoured only immediately after the action, so a
+    # free-form intention or close note may still contain the literal text.
+    share_dir = DEFAULT_SHARE_DIR
+    if len(args) >= 2 and args[0] == "--journal-dir":
+        share_dir = resolve_journal_dir(args[1])
+        args = args[2:]
+
     if action == "status":
         return cmd_status()
     if action == "light":
-        args = argv[1:]
         target = 0
         # "light --for <seconds> <intention...>"; the flag is optional so the
         # older "light <intention...>" form still works.
@@ -156,7 +171,7 @@ def main(argv: list[str]) -> int:
             args = args[2:]
         return cmd_light(" ".join(args).strip(), target)
     if action == "extinguish":
-        return cmd_extinguish(rest)
+        return cmd_extinguish(" ".join(args).strip(), share_dir)
     print(json.dumps({"error": "unknown-command"}))
     return 2
 

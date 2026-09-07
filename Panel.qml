@@ -61,6 +61,53 @@ Panel {
         return false
     }
 
+    // The form's fields in tab order. Only the intention field is on screen
+    // once the lamp is lit, so the chain shrinks to match what you can see.
+    readonly property var focusChain: root.lit
+        ? [field]
+        : [field, preset25, preset50, preset90, hoursField, minutesField, secondsField]
+
+    // Tab belongs to the bar: it walks between panels. Inside the form we
+    // borrow it for field-to-field movement and hand it back at both edges,
+    // so tabbing through Lamp still lands you in the next panel rather than
+    // trapping focus here.
+    function moveFocus(direction) {
+        const chain = root.focusChain
+        let index = -1
+        for (let i = 0; i < chain.length; i++) {
+            if (chain[i] && chain[i].activeFocus) {
+                index = i
+                break
+            }
+        }
+        const next = index + direction
+        if (index < 0 || next < 0 || next >= chain.length || !chain[next])
+            return root.switchPanel(direction)
+        chain[next].forceActiveFocus()
+        return true
+    }
+
+    // PanelKeyCatcher sets focus: true on itself and swallows keys whenever it
+    // is unblocked, so it has to stand down for every control in the form, not
+    // just the sentence field — otherwise tabbing onto a preset hands the keys
+    // straight back to the catcher.
+    readonly property bool formHasFocus: {
+        const chain = root.focusChain
+        for (let i = 0; i < chain.length; i++) {
+            if (chain[i] && chain[i].activeFocus)
+                return true
+        }
+        return false
+    }
+
+    function handleTab(event) {
+        if (event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab)
+            return
+        const back = event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier)
+        root.moveFocus(back ? -1 : 1)
+        event.accepted = true
+    }
+
     function submit() {
         if (!lamp)
             return
@@ -110,10 +157,11 @@ Panel {
 
         PanelKeyCatcher {
             anchors.fill: parent
-            // The field owns the keys whenever it has focus, so it can carry a
-            // real cursor, selection, and paste. Escape and Tab move onto it
-            // below, since a blocked catcher emits no signals of its own.
-            blocked: field.activeFocus
+            // The form owns the keys whenever any of its controls has focus,
+            // so the field can carry a real cursor, selection, and paste, and
+            // the presets can answer Return. Escape and Tab are handled on the
+            // controls below, since a blocked catcher emits no signals.
+            blocked: root.formHasFocus
             onCloseRequested: root.close()
             onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -158,12 +206,7 @@ Panel {
                     onAccepted: root.submit()
                     Keys.onEscapePressed: root.close()
                     Keys.onDownPressed: if (!root.lit) hoursField.forceActiveFocus()
-                    Keys.onPressed: function(event) {
-                        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                            root.switchPanel((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)
-                            event.accepted = true
-                        }
-                    }
+                    Keys.onPressed: function(event) { root.handleTab(event) }
                 }
 
                 Row {
@@ -171,25 +214,37 @@ Panel {
                     visible: !root.lit
                     spacing: Style.space(6)
 
-                    Repeater {
-                        model: [25, 50, 90]
-
-                        Button {
-                            id: chip
-                            required property int modelData
-                            readonly property bool picked: root.targetSeconds === chip.modelData * 60
-                            text: Model.formatTarget(chip.modelData * 60)
-                            bordered: true
-                            selected: chip.picked
-                            foreground: root.barForeground
-                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                            onClicked: {
-                                if (chip.picked) root.clearTarget()
-                                else root.setTarget(0, chip.modelData, 0)
+                    // Named rather than repeated, so the focus chain above can
+                    // address each one. Button already paints a focus ring and
+                    // fires clicked() on Return or Space once focusable is set.
+                    component PresetButton: Button {
+                        id: chip
+                        property int minutes: 0
+                        readonly property bool picked: root.targetSeconds === chip.minutes * 60
+                        text: Model.formatTarget(chip.minutes * 60)
+                        bordered: true
+                        focusable: true
+                        selected: chip.picked
+                        foreground: root.barForeground
+                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        onClicked: {
+                            if (chip.picked) root.clearTarget()
+                            else root.setTarget(0, chip.minutes, 0)
+                            // A mouse click leaves focus nowhere useful, so send
+                            // it back to the sentence. A keyboard press should
+                            // stay put, or Tab would throw you to the top again.
+                            if (!chip.activeFocus)
                                 field.forceActiveFocus()
-                            }
                         }
+                        Keys.onUpPressed: field.forceActiveFocus()
+                        Keys.onDownPressed: hoursField.forceActiveFocus()
+                        Keys.onEscapePressed: root.close()
+                        Keys.onPressed: function(event) { root.handleTab(event) }
                     }
+
+                    PresetButton { id: preset25; minutes: 25 }
+                    PresetButton { id: preset50; minutes: 50 }
+                    PresetButton { id: preset90; minutes: 90 }
                 }
 
                 Row {
@@ -210,13 +265,9 @@ Panel {
 
                         onAccepted: root.submit()
                         Keys.onEscapePressed: root.close()
-                        // Tab keeps switching bar panels, so the arrows walk the form.
-                        Keys.onPressed: function(event) {
-                            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                                root.switchPanel((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)
-                                event.accepted = true
-                            }
-                        }
+                        // Arrows still walk the form; Tab does too, and steps
+                        // out to the neighbouring panel at either end.
+                        Keys.onPressed: function(event) { root.handleTab(event) }
                     }
 
                     UnitField {
@@ -244,7 +295,7 @@ Panel {
                     width: parent.width
                     text: root.lit
                           ? "Enter to extinguish \u00b7 Esc to leave it lit"
-                          : "Enter to light \u00b7 \u2193 for hours / min / sec \u00b7 Esc to close"
+                          : "Enter to light \u00b7 Tab walks presets and h / m / s \u00b7 Esc to close"
                     color: root.barForeground
                     opacity: 0.4
                     font.family: root.bar ? root.bar.fontFamily : Style.font.family
