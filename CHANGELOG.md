@@ -7,7 +7,34 @@ Also published as [GitHub releases](https://github.com/saipraneethpb1/omarchy-la
 Lamp installs as a git checkout, so `omarchy plugin update saipraneethpb1.lamp`
 moves you to the latest commit on `main` rather than to a tagged release. Tags
 are here for pinning: `git -C ~/.config/omarchy/plugins/saipraneethpb1.lamp
-checkout v1.1.1`.
+checkout v1.1.2`.
+
+## 1.1.2 — 2026-09-08
+
+### Fixed
+
+- **Security.** The session file lives at a predictable path
+  (`~/.local/state/omarchy/lamp/session.json`) and was read and written without
+  checking what was actually there. Reads followed a symlink, would block
+  forever on a planted FIFO, and were unbounded; writes went through the
+  equally predictable `session.json.tmp`, which anyone able to write into the
+  directory could pre-create as a symlink to redirect or truncate another of
+  your files. Reported during marketplace review, in the same pass that found
+  the journal issue in 1.1.1.
+
+  The state directory is now opened with `O_NOFOLLOW`, verified on the
+  descriptor, and forced to mode 0700. Reads use `O_NOFOLLOW|O_NONBLOCK`, must
+  be a regular file you own, and stop at 64 KB. Writes go through a random
+  `O_CREAT|O_EXCL` mode-0600 temp name, are fsynced, renamed
+  directory-relative, and the directory is fsynced after — so a crash leaves
+  either the old session or the new one, never a stub. A refused path is
+  reported rather than reported as an unlit lamp.
+
+  Your state directory is tightened to 0700 the next time Lamp runs.
+
+### Changed
+
+- The journal and state directories now share one audited verification path.
 
 ## 1.1.1 — 2026-09-08
 

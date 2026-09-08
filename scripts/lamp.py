@@ -6,6 +6,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import secrets
 import stat
 import sys
 from datetime import datetime, timezone
@@ -13,8 +14,102 @@ from pathlib import Path
 
 STATE_DIR = Path.home() / ".local" / "state" / "omarchy" / "lamp"
 DEFAULT_SHARE_DIR = Path.home() / ".local" / "share" / "omarchy-lamp"
-SESSION_PATH = STATE_DIR / "session.json"
+SESSION_NAME = "session.json"
+SESSION_PATH = STATE_DIR / SESSION_NAME
 MAX_TARGET_SECONDS = 24 * 60 * 60
+# A session is a handful of short fields. Anything larger is not ours, and
+# reading it unbounded would let a planted file exhaust the helper and the
+# QML collector that buffers its output.
+MAX_SESSION_BYTES = 64 * 1024
+
+
+class LampError(Exception):
+    """A path we are not willing to read from or write to."""
+
+
+class SessionError(LampError):
+    """The session file or its directory failed a safety check."""
+
+
+def open_verified_dir(path: Path, *, private: bool) -> tuple[int, Path]:
+    """Create and open a directory, returning a descriptor we have vetted.
+
+    The path is canonicalized first, so a symlinked location still works, then
+    opened with O_NOFOLLOW so the final component cannot be swapped for a link
+    in the meantime. Every check runs against the descriptor, so what was
+    verified is what gets used.
+
+    `private` marks a directory that is ours alone (the state directory): it is
+    forced back to 0700 through the descriptor rather than merely accepted. The
+    journal directory is the user's own folder, so it is only required not to
+    be group- or world-writable.
+    """
+    try:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError as exc:
+        raise LampError(f"cannot create {path}: {exc.strerror}")
+
+    canonical = Path(os.path.realpath(path))
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        dir_fd = os.open(canonical, flags)
+    except OSError as exc:
+        raise LampError(f"cannot open {canonical}: {exc.strerror}")
+
+    try:
+        info = os.fstat(dir_fd)
+        if info.st_uid != os.getuid():
+            raise LampError(f"directory is not owned by you: {canonical}")
+        if private:
+            if stat.S_IMODE(info.st_mode) & 0o077:
+                os.fchmod(dir_fd, 0o700)
+        elif info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            raise LampError(f"directory is group- or world-writable: {canonical}")
+    except Exception:
+        os.close(dir_fd)
+        raise
+    return dir_fd, canonical
+
+
+def read_verified_file(dir_fd: int, name: str, limit: int) -> bytes | None:
+    """Read a regular file we own, relative to a vetted directory descriptor.
+
+    O_NOFOLLOW rejects a planted symlink and O_NONBLOCK keeps a planted FIFO
+    from parking the helper forever on open; the S_ISREG check then rejects it
+    outright. The read is bounded, so a large file cannot exhaust us even if
+    it grows between the fstat and the read. Returns None when absent.
+    """
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+    try:
+        fd = os.open(name, flags, dir_fd=dir_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise SessionError(f"{name} is a symbolic link, not a session file")
+        raise SessionError(f"cannot read {name}: {exc.strerror}")
+
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise SessionError(f"{name} is not a regular file")
+        if info.st_uid != os.getuid():
+            raise SessionError(f"{name} is not owned by you")
+        if info.st_size > limit:
+            raise SessionError(f"{name} is larger than {limit} bytes")
+        chunks = []
+        total = 0
+        while True:
+            block = os.read(fd, 65536)
+            if not block:
+                break
+            total += len(block)
+            if total > limit:
+                raise SessionError(f"{name} is larger than {limit} bytes")
+            chunks.append(block)
+    finally:
+        os.close(fd)
+    return b"".join(chunks)
 
 
 def now_iso() -> str:
@@ -55,22 +150,58 @@ def session_target(session: dict) -> int:
 
 
 def load_session() -> dict:
-    if not SESSION_PATH.exists():
+    """The session on disk, or an unlit one.
+
+    A malformed file is treated as no session, the way it always was — that is
+    an ordinary accident. A file that fails a safety check is not: it is raised
+    so the caller can say so instead of quietly reporting the lamp as out.
+    """
+    dir_fd, _ = open_verified_dir(STATE_DIR, private=True)
+    try:
+        raw = read_verified_file(dir_fd, SESSION_NAME, MAX_SESSION_BYTES)
+    finally:
+        os.close(dir_fd)
+    if raw is None:
         return {"lit": False}
     try:
-        data = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
-    except (OSError, json.JSONDecodeError):
-        pass
-    return {"lit": False}
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {"lit": False}
+    return data if isinstance(data, dict) else {"lit": False}
 
 
 def save_session(data: dict) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = SESSION_PATH.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, SESSION_PATH)
+    """Write the session atomically, through a temp name nobody can predict.
+
+    The old temp name was `session.json.tmp`, which anyone able to write into
+    the directory could pre-create as a symlink pointing somewhere else. This
+    one is random and opened O_EXCL, so it is always ours and always new. The
+    payload is fsynced before the rename and the directory after it, so a
+    crash leaves either the previous session or the new one, never a stub.
+    """
+    payload = (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    dir_fd, canonical = open_verified_dir(STATE_DIR, private=True)
+    tmp_name = f".{SESSION_NAME}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+        fd = os.open(tmp_name, flags, 0o600, dir_fd=dir_fd)
+        try:
+            written = 0
+            while written < len(payload):
+                written += os.write(fd, payload[written:])
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        try:
+            os.replace(tmp_name, SESSION_NAME, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        except OSError:
+            os.unlink(tmp_name, dir_fd=dir_fd)
+            raise
+        os.fsync(dir_fd)
+    except OSError as exc:
+        raise SessionError(f"cannot write the session in {canonical}: {exc.strerror}")
+    finally:
+        os.close(dir_fd)
 
 
 def resolve_journal_dir(raw) -> Path:
@@ -81,44 +212,21 @@ def resolve_journal_dir(raw) -> Path:
     return Path(os.path.expanduser(os.path.expandvars(candidate)))
 
 
-class JournalError(Exception):
+class JournalError(LampError):
     """The journal directory or file is not somewhere we are willing to write."""
 
 
 def open_journal_dir(share_dir: Path) -> tuple[int, Path]:
-    """Create and open the journal directory, returning a verified descriptor.
+    """The user's journal folder, vetted the same way the state directory is.
 
-    The directory is canonicalized first, so pointing journalDir at a symlinked
-    vault still works, and then opened with O_NOFOLLOW: after resolution the
-    final component must not be a symlink, which closes the window where one is
-    swapped in between resolving and opening. Every check runs against the
-    descriptor rather than the path, so the thing we verified is the thing we
-    write into.
+    Not `private`: this is a folder they chose and may legitimately share with
+    their own tools, so it only has to be theirs and not group- or
+    world-writable.
     """
     try:
-        share_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    except OSError as exc:
-        raise JournalError(f"cannot create journal directory {share_dir}: {exc.strerror}")
-
-    canonical = Path(os.path.realpath(share_dir))
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-    try:
-        dir_fd = os.open(canonical, flags)
-    except OSError as exc:
-        raise JournalError(f"cannot open journal directory {canonical}: {exc.strerror}")
-
-    try:
-        info = os.fstat(dir_fd)
-        if info.st_uid != os.getuid():
-            raise JournalError(f"journal directory is not owned by you: {canonical}")
-        if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-            raise JournalError(
-                f"journal directory is group- or world-writable: {canonical}"
-            )
-    except Exception:
-        os.close(dir_fd)
-        raise
-    return dir_fd, canonical
+        return open_verified_dir(share_dir, private=False)
+    except LampError as exc:
+        raise JournalError(str(exc))
 
 
 def open_journal_file(dir_fd: int, name: str) -> int:
@@ -236,6 +344,19 @@ def cmd_extinguish(close: str, share_dir: Path) -> int:
 
 
 def main(argv: list[str]) -> int:
+    """Report a refused path as JSON so the QML service can surface it.
+
+    Every surface parses stdout, and `lit: false` keeps a failed read from
+    being mistaken for a lit lamp.
+    """
+    try:
+        return dispatch(argv)
+    except LampError as exc:
+        print(json.dumps({"error": str(exc), "lit": False}, ensure_ascii=False))
+        return 1
+
+
+def dispatch(argv: list[str]) -> int:
     if not argv:
         return cmd_status()
     action = argv[0]

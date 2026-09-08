@@ -107,6 +107,87 @@ class JournalWriteTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(path.stat().st_mode) & 0o077, 0)
 
 
+class SessionStateTests(unittest.TestCase):
+    """The session file is at a predictable path, so it is an attack surface."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.state = self.root / "state"
+        self._saved = lamp.STATE_DIR
+        lamp.STATE_DIR = self.state
+
+    def tearDown(self):
+        lamp.STATE_DIR = self._saved
+        self._tmp.cleanup()
+
+    def test_round_trip(self):
+        lamp.save_session({"lit": True, "intention": "ship it"})
+        self.assertEqual(lamp.load_session()["intention"], "ship it")
+
+    def test_missing_file_reads_as_unlit(self):
+        self.assertEqual(lamp.load_session(), {"lit": False})
+
+    def test_malformed_json_reads_as_unlit(self):
+        lamp.save_session({"lit": True})
+        (self.state / lamp.SESSION_NAME).write_text("{ not json", encoding="utf-8")
+        self.assertEqual(lamp.load_session(), {"lit": False})
+
+    def test_state_directory_is_forced_private(self):
+        lamp.save_session({"lit": False})
+        os.chmod(self.state, 0o755)
+        lamp.load_session()
+        self.assertEqual(stat.S_IMODE(self.state.stat().st_mode), 0o700)
+
+    def test_symlinked_session_file_is_refused(self):
+        victim = self.root / "victim.txt"
+        original = "important user data\n"
+        victim.write_text(original, encoding="utf-8")
+        self.state.mkdir(mode=0o700, parents=True)
+        os.symlink(victim, self.state / lamp.SESSION_NAME)
+
+        with self.assertRaises(lamp.SessionError):
+            lamp.load_session()
+        self.assertEqual(victim.read_text(encoding="utf-8"), original)
+
+    def test_fifo_session_file_is_refused_without_blocking(self):
+        """O_NONBLOCK on open, then S_ISREG rejects it: no hang, no read."""
+        self.state.mkdir(mode=0o700, parents=True)
+        os.mkfifo(self.state / lamp.SESSION_NAME)
+        with self.assertRaises(lamp.SessionError):
+            lamp.load_session()
+
+    def test_oversized_session_file_is_refused(self):
+        self.state.mkdir(mode=0o700, parents=True)
+        blob = "x" * (lamp.MAX_SESSION_BYTES + 1)
+        (self.state / lamp.SESSION_NAME).write_text(blob, encoding="utf-8")
+        with self.assertRaises(lamp.SessionError):
+            lamp.load_session()
+
+    def test_planted_predictable_temp_symlink_is_not_followed(self):
+        """The old code wrote through session.json.tmp, which was guessable."""
+        victim = self.root / "victim-tmp.txt"
+        original = "important user data\n"
+        victim.write_text(original, encoding="utf-8")
+        self.state.mkdir(mode=0o700, parents=True)
+        os.symlink(victim, self.state / f"{lamp.SESSION_NAME}.tmp")
+
+        lamp.save_session({"lit": True, "intention": "unaffected"})
+
+        self.assertEqual(victim.read_text(encoding="utf-8"), original)
+        self.assertEqual(lamp.load_session()["intention"], "unaffected")
+
+    def test_no_temp_files_are_left_behind(self):
+        lamp.save_session({"lit": True})
+        leftovers = [p.name for p in self.state.iterdir() if p.name.endswith(".tmp")]
+        self.assertEqual(leftovers, [])
+
+    def test_session_file_is_private(self):
+        lamp.save_session({"lit": True})
+        mode = (self.state / lamp.SESSION_NAME).stat().st_mode
+        self.assertEqual(stat.S_IMODE(mode) & 0o077, 0)
+
+
 class ResolveJournalDirTests(unittest.TestCase):
     def test_empty_falls_back_to_the_default(self):
         for value in ("", "   ", None):
