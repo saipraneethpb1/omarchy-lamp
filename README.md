@@ -113,6 +113,11 @@ Example journal page:
 **What moved:** Manifest, overlay, and the first honest README
 ```
 
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md). `omarchy plugin update saipraneethpb1.lamp` moves
+you to the latest commit on `main`; tags are there if you would rather pin.
+
 ## Requirements
 
 - Omarchy Quattro (`omarchy-shell`)
