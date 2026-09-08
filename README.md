@@ -115,8 +115,10 @@ Example journal page:
 
 ## Changelog
 
-[CHANGELOG.md](CHANGELOG.md). `omarchy plugin update saipraneethpb1.lamp` moves
-you to the latest commit on `main`; tags are there if you would rather pin.
+[CHANGELOG.md](CHANGELOG.md), also published as
+[releases](https://github.com/saipraneethpb1/omarchy-lamp/releases).
+`omarchy plugin update saipraneethpb1.lamp` moves you to the latest commit on
+`main`; tags are there if you would rather pin.
 
 ## Requirements
 

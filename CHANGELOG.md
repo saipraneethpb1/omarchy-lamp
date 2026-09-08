@@ -2,6 +2,8 @@
 
 Notable changes to Lamp. Versions follow the `version` field in `manifest.json`.
 
+Also published as [GitHub releases](https://github.com/saipraneethpb1/omarchy-lamp/releases).
+
 Lamp installs as a git checkout, so `omarchy plugin update saipraneethpb1.lamp`
 moves you to the latest commit on `main` rather than to a tagged release. Tags
 are here for pinning: `git -C ~/.config/omarchy/plugins/saipraneethpb1.lamp
