@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,15 +81,95 @@ def resolve_journal_dir(raw) -> Path:
     return Path(os.path.expanduser(os.path.expandvars(candidate)))
 
 
+class JournalError(Exception):
+    """The journal directory or file is not somewhere we are willing to write."""
+
+
+def open_journal_dir(share_dir: Path) -> tuple[int, Path]:
+    """Create and open the journal directory, returning a verified descriptor.
+
+    The directory is canonicalized first, so pointing journalDir at a symlinked
+    vault still works, and then opened with O_NOFOLLOW: after resolution the
+    final component must not be a symlink, which closes the window where one is
+    swapped in between resolving and opening. Every check runs against the
+    descriptor rather than the path, so the thing we verified is the thing we
+    write into.
+    """
+    try:
+        share_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError as exc:
+        raise JournalError(f"cannot create journal directory {share_dir}: {exc.strerror}")
+
+    canonical = Path(os.path.realpath(share_dir))
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        dir_fd = os.open(canonical, flags)
+    except OSError as exc:
+        raise JournalError(f"cannot open journal directory {canonical}: {exc.strerror}")
+
+    try:
+        info = os.fstat(dir_fd)
+        if info.st_uid != os.getuid():
+            raise JournalError(f"journal directory is not owned by you: {canonical}")
+        if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            raise JournalError(
+                f"journal directory is group- or world-writable: {canonical}"
+            )
+    except Exception:
+        os.close(dir_fd)
+        raise
+    return dir_fd, canonical
+
+
+def open_journal_file(dir_fd: int, name: str) -> int:
+    """Open today's page relative to an already verified directory descriptor.
+
+    O_NOFOLLOW is the point: the daily name is predictable, so anyone able to
+    write into the directory could otherwise pre-create it as a symlink and
+    have us append to a file somewhere else entirely. O_NOFOLLOW does not stop
+    a hard link, which reaches the same target, so the link count is checked
+    too.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        fd = os.open(name, flags, 0o600, dir_fd=dir_fd)
+    except OSError as exc:
+        # O_NOFOLLOW reports a symlink as ELOOP, which reads as nonsense to
+        # anyone who has not just been attacked. Say what actually happened.
+        if exc.errno == errno.ELOOP:
+            raise JournalError(
+                f"refusing to write {name}: it is a symbolic link, not a journal page"
+            )
+        raise JournalError(f"refusing to write {name}: {exc.strerror}")
+
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise JournalError(f"journal page is not a regular file: {name}")
+        if info.st_uid != os.getuid():
+            raise JournalError(f"journal page is not owned by you: {name}")
+        if info.st_nlink > 1:
+            raise JournalError(f"journal page is hard-linked elsewhere: {name}")
+    except Exception:
+        os.close(fd)
+        raise
+    return fd
+
+
 def append_journal(entry: str, share_dir: Path) -> Path:
-    share_dir.mkdir(parents=True, exist_ok=True)
-    path = share_dir / f"{today_stamp()}.md"
-    header_needed = not path.exists()
-    with path.open("a", encoding="utf-8") as fh:
-        if header_needed:
-            fh.write(f"# {today_stamp()}\n\n")
-        fh.write(entry.rstrip() + "\n\n")
-    return path
+    stamp = today_stamp()
+    name = f"{stamp}.md"
+    dir_fd, canonical = open_journal_dir(share_dir)
+    try:
+        fd = open_journal_file(dir_fd, name)
+        empty = os.fstat(fd).st_size == 0
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            if empty:
+                fh.write(f"# {stamp}\n\n")
+            fh.write(entry.rstrip() + "\n\n")
+    finally:
+        os.close(dir_fd)
+    return canonical / name
 
 
 def cmd_status() -> int:
@@ -140,9 +222,15 @@ def cmd_extinguish(close: str, share_dir: Path) -> int:
         lines += ["", f"**Planned:** {format_duration(target)}"]
     if close:
         lines += ["", f"**What moved:** {close}"]
-    path = append_journal("\n".join(lines), share_dir)
     out = dict(session)
-    out["journal"] = str(path)
+    # The session is already closed on disk. If the page cannot be written
+    # safely, say so rather than losing the extinguish.
+    try:
+        out["journal"] = str(append_journal("\n".join(lines), share_dir))
+    except JournalError as exc:
+        out["error"] = str(exc)
+        print(json.dumps(out, ensure_ascii=False))
+        return 1
     print(json.dumps(out, ensure_ascii=False))
     return 0
 

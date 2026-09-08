@@ -87,6 +87,12 @@ folder is created on demand, and an empty or missing value keeps the default
 above. Pages already written stay where they are — this only changes where the
 next one lands.
 
+The folder must be yours and must not be group- or world-writable, and today's
+page must be a regular file rather than a link. Lamp refuses to write and says
+why otherwise, because the daily filename is predictable: on a shared machine
+anyone who could write into that folder could pre-create it pointing somewhere
+else. A symlinked path to the folder itself is fine — that is resolved first.
+
 The helper takes the same setting directly, which is handy for scripting:
 
 ```bash
@@ -137,11 +143,12 @@ rm -rf ~/.local/state/omarchy/lamp ~/.local/share/omarchy-lamp
 
 ```bash
 omarchy plugin validate .
+python3 scripts/test_lamp.py
 ```
 
 ## Security
 
-Lamp runs inside `omarchy-shell` with your user permissions, like every other plugin. The helper `scripts/lamp.py` only reads and writes the two paths above, or the journal folder you point it at. It does not spawn a shell, does not touch your theme, and does not call the network.
+Lamp runs inside `omarchy-shell` with your user permissions, like every other plugin. The helper `scripts/lamp.py` only reads and writes the two paths above, or the journal folder you point it at, and it verifies that folder is private and that today's page is a regular file before appending to it (`scripts/test_lamp.py` covers the symlink, hard link, and shared-folder cases). It does not spawn a shell, does not touch your theme, and does not call the network.
 
 Marketplace listing is not a security audit. Read the three QML files and the helper before you enable it.
 
