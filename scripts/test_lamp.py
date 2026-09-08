@@ -18,9 +18,29 @@ lamp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lamp)
 
 
+def private_tmp() -> str:
+    """A scratch root Lamp will accept.
+
+    Lamp refuses any path with a group- or world-writable ancestor, and /tmp
+    is exactly that, so the default tempfile location fails on purpose. The
+    per-user runtime directory is private by contract; fall back to a folder
+    under the user's own cache.
+    """
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime and os.path.isdir(runtime):
+        return runtime
+    fallback = Path.home() / ".cache" / "omarchy-lamp-tests"
+    fallback.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return str(fallback)
+
+
+def scratch() -> tempfile.TemporaryDirectory:
+    return tempfile.TemporaryDirectory(dir=private_tmp())
+
+
 class JournalWriteTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = scratch()
         self.root = Path(self._tmp.name)
         self.journal = self.root / "journal"
         self.journal.mkdir(mode=0o700)
@@ -111,7 +131,7 @@ class SessionStateTests(unittest.TestCase):
     """The session file is at a predictable path, so it is an attack surface."""
 
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = scratch()
         self.root = Path(self._tmp.name)
         self.state = self.root / "state"
         self._saved = lamp.STATE_DIR
@@ -186,6 +206,75 @@ class SessionStateTests(unittest.TestCase):
         lamp.save_session({"lit": True})
         mode = (self.state / lamp.SESSION_NAME).stat().st_mode
         self.assertEqual(stat.S_IMODE(mode) & 0o077, 0)
+
+
+class ContainmentTests(unittest.TestCase):
+    """A vetted leaf is not enough if a parent can be rewritten by others."""
+
+    def setUp(self):
+        self._tmp = scratch()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_journal_under_world_writable_parent_is_refused(self):
+        shared = self.root / "shared"
+        shared.mkdir()
+        os.chmod(shared, 0o1777)  # sticky, like /tmp
+        leaf = shared / "vault"
+        leaf.mkdir(mode=0o700)
+        with self.assertRaises(lamp.JournalError) as ctx:
+            lamp.append_journal("page", leaf)
+        self.assertIn("world-writable", str(ctx.exception))
+        self.assertFalse(any(leaf.iterdir()))
+
+    def test_state_under_world_writable_parent_is_refused(self):
+        shared = self.root / "shared"
+        shared.mkdir()
+        os.chmod(shared, 0o777)
+        saved = lamp.STATE_DIR
+        lamp.STATE_DIR = shared / "lamp"
+        try:
+            with self.assertRaises(lamp.LampError):
+                lamp.load_session()
+        finally:
+            lamp.STATE_DIR = saved
+
+    def test_private_parents_are_fine(self):
+        nested = self.root / "a" / "b" / "vault"
+        path = lamp.append_journal("page", nested)
+        self.assertTrue(path.is_file())
+
+
+class SaveSessionFailureTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = scratch()
+        self.state = Path(self._tmp.name) / "state"
+        self._saved = lamp.STATE_DIR
+        lamp.STATE_DIR = self.state
+
+    def tearDown(self):
+        lamp.STATE_DIR = self._saved
+        self._tmp.cleanup()
+
+    def test_failed_write_leaves_no_temp_and_keeps_old_session(self):
+        lamp.save_session({"lit": True, "intention": "before"})
+        real_fsync = os.fsync
+
+        def broken_fsync(fd):
+            raise OSError(5, "Input/output error")
+
+        os.fsync = broken_fsync
+        try:
+            with self.assertRaises(lamp.SessionError):
+                lamp.save_session({"lit": True, "intention": "after"})
+        finally:
+            os.fsync = real_fsync
+
+        leftovers = [p.name for p in self.state.iterdir() if p.name.endswith(".tmp")]
+        self.assertEqual(leftovers, [])
+        self.assertEqual(lamp.load_session()["intention"], "before")
 
 
 class ResolveJournalDirTests(unittest.TestCase):

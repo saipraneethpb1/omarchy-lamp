@@ -31,6 +31,31 @@ class SessionError(LampError):
     """The session file or its directory failed a safety check."""
 
 
+def verify_ancestors(canonical: Path) -> None:
+    """Every directory above the one we open must be one nobody else can edit.
+
+    The leaf is opened O_NOFOLLOW and checked on its descriptor, but if a
+    parent were writable by someone else, a component could be swapped for a
+    symlink between canonicalization and the open, and the leaf checks would
+    then be vouching for the wrong place. Root-owned system directories such
+    as /home pass; a sticky world-writable one such as /tmp does not.
+    """
+    uid = os.getuid()
+    for parent in canonical.parents:
+        try:
+            info = os.stat(parent)
+        except OSError as exc:
+            raise LampError(f"cannot inspect {parent}: {exc.strerror}")
+        if info.st_uid not in (0, uid):
+            raise LampError(
+                f"{parent} belongs to someone else, so {canonical} cannot be trusted"
+            )
+        if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            raise LampError(
+                f"{parent} is group- or world-writable, so {canonical} cannot be trusted"
+            )
+
+
 def open_verified_dir(path: Path, *, private: bool) -> tuple[int, Path]:
     """Create and open a directory, returning a descriptor we have vetted.
 
@@ -50,6 +75,7 @@ def open_verified_dir(path: Path, *, private: bool) -> tuple[int, Path]:
         raise LampError(f"cannot create {path}: {exc.strerror}")
 
     canonical = Path(os.path.realpath(path))
+    verify_ancestors(canonical)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
     try:
         dir_fd = os.open(canonical, flags)
@@ -65,9 +91,12 @@ def open_verified_dir(path: Path, *, private: bool) -> tuple[int, Path]:
                 os.fchmod(dir_fd, 0o700)
         elif info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
             raise LampError(f"directory is group- or world-writable: {canonical}")
-    except Exception:
+    except LampError:
         os.close(dir_fd)
         raise
+    except OSError as exc:
+        os.close(dir_fd)
+        raise LampError(f"cannot verify {canonical}: {exc.strerror}")
     return dir_fd, canonical
 
 
@@ -107,6 +136,8 @@ def read_verified_file(dir_fd: int, name: str, limit: int) -> bytes | None:
             if total > limit:
                 raise SessionError(f"{name} is larger than {limit} bytes")
             chunks.append(block)
+    except OSError as exc:
+        raise SessionError(f"cannot read {name}: {exc.strerror}")
     finally:
         os.close(fd)
     return b"".join(chunks)
@@ -182,9 +213,11 @@ def save_session(data: dict) -> None:
     payload = (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     dir_fd, canonical = open_verified_dir(STATE_DIR, private=True)
     tmp_name = f".{SESSION_NAME}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
+    pending = False
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
         fd = os.open(tmp_name, flags, 0o600, dir_fd=dir_fd)
+        pending = True
         try:
             written = 0
             while written < len(payload):
@@ -192,15 +225,19 @@ def save_session(data: dict) -> None:
             os.fsync(fd)
         finally:
             os.close(fd)
-        try:
-            os.replace(tmp_name, SESSION_NAME, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
-        except OSError:
-            os.unlink(tmp_name, dir_fd=dir_fd)
-            raise
+        os.replace(tmp_name, SESSION_NAME, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        pending = False
         os.fsync(dir_fd)
     except OSError as exc:
         raise SessionError(f"cannot write the session in {canonical}: {exc.strerror}")
     finally:
+        # A failure anywhere between creating the temp and renaming it away
+        # must not leave a stray file in the state directory.
+        if pending:
+            try:
+                os.unlink(tmp_name, dir_fd=dir_fd)
+            except OSError:
+                pass
         os.close(dir_fd)
 
 
@@ -258,9 +295,12 @@ def open_journal_file(dir_fd: int, name: str) -> int:
             raise JournalError(f"journal page is not owned by you: {name}")
         if info.st_nlink > 1:
             raise JournalError(f"journal page is hard-linked elsewhere: {name}")
-    except Exception:
+    except LampError:
         os.close(fd)
         raise
+    except OSError as exc:
+        os.close(fd)
+        raise JournalError(f"cannot verify {name}: {exc.strerror}")
     return fd
 
 

@@ -7,7 +7,24 @@ Also published as [GitHub releases](https://github.com/saipraneethpb1/omarchy-la
 Lamp installs as a git checkout, so `omarchy plugin update saipraneethpb1.lamp`
 moves you to the latest commit on `main` rather than to a tagged release. Tags
 are here for pinning: `git -C ~/.config/omarchy/plugins/saipraneethpb1.lamp
-checkout v1.1.2`.
+checkout v1.1.3`.
+
+## 1.1.3 — 2026-09-08
+
+### Fixed
+
+- **Security hardening, same class as 1.1.1 and 1.1.2.** Every directory above
+  the state and journal directories must now belong to you or to root and must
+  not be group- or world-writable, so a private folder under a shared parent —
+  anything in `/tmp`, for instance — is refused with a message naming the
+  parent. Without this, a component could be swapped for a symlink between
+  canonicalizing the path and opening it, and the checks on the final
+  directory would be vouching for the wrong place. Found in a self-audit after
+  the two review reports; not externally reported.
+- A write that fails after the temp file is created no longer leaves it in the
+  state directory.
+- A failure inside the safety checks themselves is reported as an error rather
+  than escaping as a traceback.
 
 ## 1.1.2 — 2026-09-08
 

@@ -87,8 +87,9 @@ folder is created on demand, and an empty or missing value keeps the default
 above. Pages already written stay where they are — this only changes where the
 next one lands.
 
-The folder must be yours and must not be group- or world-writable, and today's
-page must be a regular file rather than a link. Lamp refuses to write and says
+The folder must be yours and must not be group- or world-writable — and
+neither may any folder above it, so anything under `/tmp` is refused — and
+today's page must be a regular file rather than a link. Lamp refuses to write and says
 why otherwise, because the daily filename is predictable: on a shared machine
 anyone who could write into that folder could pre-create it pointing somewhere
 else. A symlinked path to the folder itself is fine — that is resolved first.
